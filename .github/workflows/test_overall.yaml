@@ -48,3 +48,14 @@ jobs:
       - name: Run sync bench tests
         run: |
           uv run pytest test/test_file_handler.py
+
+      - name: Ensure pip cache directory exists (Unix)
+        if: runner.os != 'Windows'
+        run: mkdir -p /home/runner/.cache/pip
+
+      - name: Ensure pip cache directory exists (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if (!(Test-Path -Path "$env:USERPROFILE\.cache\pip")) {
+            New-Item -ItemType Directory -Path "$env:USERPROFILE\.cache\pip" | Out-Null
+          }
