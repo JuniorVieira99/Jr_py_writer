@@ -48,3 +48,6 @@ jobs:
       - name: Run sync bench tests
         run: |
           uv run pytest test/test_bench_sync_file_handler.py --benchmark-enable --benchmark-json=test/benchmark_json/sync_benchmark.json
+
+      - name: Ensure pip cache directory exists
+        run: mkdir -p /home/runner/.cache/pip
