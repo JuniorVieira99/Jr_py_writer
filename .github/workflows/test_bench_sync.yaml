@@ -51,7 +51,7 @@ jobs:
 
       - name: Ensure pip cache directory exists (Unix)
         if: runner.os != 'Windows'
-        run: mkdir -p /home/runner/.cache/pip
+        run: mkdir -p $HOME/.cache/pip
 
       - name: Ensure pip cache directory exists (Windows)
         if: runner.os == 'Windows'
