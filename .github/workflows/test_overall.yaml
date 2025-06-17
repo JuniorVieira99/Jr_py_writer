@@ -1,4 +1,4 @@
-name: tests_bench_sync
+name: tests_overall_sync
 
 on:
   workflow_dispatch:
@@ -45,13 +45,13 @@ jobs:
           uv sync
           uv pip install -e .
 
-      - name: Run sync bench tests
+      - name: Run sync overall tests
         run: |
           uv run pytest test/test_file_handler.py
 
       - name: Ensure pip cache directory exists (Unix)
         if: runner.os != 'Windows'
-        run: mkdir -p /home/runner/.cache/pip
+        run: mkdir -p $HOME/.cache/pip
 
       - name: Ensure pip cache directory exists (Windows)
         if: runner.os == 'Windows'
