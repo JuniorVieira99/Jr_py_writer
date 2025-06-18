@@ -8,6 +8,7 @@ from enum import StrEnum
 # Classes
 # ----------------------------------------------------------------------------------------------
 
+
 class LogWriteMode(StrEnum):
     """
     String Enum for log write modes.
@@ -18,14 +19,14 @@ class LogWriteMode(StrEnum):
         READ (str | r): Read mode, reads from the file.
         READ_WRITE (str | r+): Read and write mode, allows reading and writing.
         WRITE_READ (str | w+): Write and read mode, allows writing and reading.
-        
+
     """
+
     APPEND = "a"
     OVERWRITE = "w"
     READ = "r"
     READ_WRITE = "r+"
     WRITE_READ = "w+"
-
 
     @staticmethod
     def print_modes():
@@ -34,4 +35,3 @@ class LogWriteMode(StrEnum):
         """
         for mode in LogWriteMode:
             print(f"{mode.name}: {mode.value}")
-

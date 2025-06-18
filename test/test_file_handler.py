@@ -18,8 +18,9 @@ import psutil
 # Local imports
 from jr_py_writer.handler_file import FileHandler
 from jr_py_writer.utils.module_enums import LogWriteMode
+
 # Exceptions
-from jr_py_writer.exceptions.exceptions_file_handler import(
+from jr_py_writer.exceptions.exceptions_file_handler import (
     FileHandlerConstructionError,
     FileHandlerSettingsError,
     FileHandlerWriteError,
@@ -31,6 +32,7 @@ from jr_py_writer.exceptions.exceptions_file_handler import(
 # Fixture
 # ----------------------------------------------------------------------------------------------
 
+
 @pytest.fixture
 def fixture_file_handler(tmp_path) -> Generator[FileHandler, None, None]:
     """Fixture for FileHandler with temporary files."""
@@ -39,17 +41,17 @@ def fixture_file_handler(tmp_path) -> Generator[FileHandler, None, None]:
         file_paths=temp_files,  # Use temp files
         retry_limit=0,
         retry_delay=0.0,
-        backoff_factor=0.0
+        backoff_factor=0.0,
     )
-    
+
     yield handler
-    
+
     # Cleanup
     handler.clear_sync_pool()
     handler.force_shutdown(wait=True)
 
 
-def temporary_file_handler(num: int , tmp_path) -> List[Path]:
+def temporary_file_handler(num: int, tmp_path) -> List[Path]:
     """Fixture for creating temporary files for testing."""
     file_paths = [tmp_path / f"test_{i}.log" for i in range(1, num + 1)]
     for file_path in file_paths:
@@ -62,20 +64,32 @@ def temporary_file_handler(num: int , tmp_path) -> List[Path]:
 # ----------------------------------------------------------------------------------------------
 
 EDGE_INT = [
-    0.0, "1.0", [], {}, tuple() , set(), None, b"byte",
+    0.0,
+    "1.0",
+    [],
+    {},
+    tuple(),
+    set(),
+    None,
+    b"byte",
 ]
 
-EDGE_FLOAT = [
-    -1.0, "1.0", [], {}, tuple(), set(), None, b"byte"
-]
+EDGE_FLOAT = [-1.0, "1.0", [], {}, tuple(), set(), None, b"byte"]
 
 EDGE_PATHS = [
-    tuple(), [], {}, set(), None, b"byte", 55, 1.0, -1.0, "1.0",
+    tuple(),
+    [],
+    {},
+    set(),
+    None,
+    b"byte",
+    55,
+    1.0,
+    -1.0,
+    "1.0",
 ]
 
-EDGE_LOG = [
-    55, 1.0, -1.0, [], {}, tuple(), set(), None
-]
+EDGE_LOG = [55, 1.0, -1.0, [], {}, tuple(), set(), None]
 
 BATCH_TEST_CASES: Final[List[int]] = [100, 300, 500, 1000, 2000]
 
@@ -83,16 +97,14 @@ BATCH_TEST_CASES: Final[List[int]] = [100, 300, 500, 1000, 2000]
 # EDGE Tests
 # ----------------------------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("edge_value", EDGE_PATHS)
 def test_file_handler_edge_constructor_paths(edge_value):
     """Test edge cases for FileHandler constructor."""
     # Test with invalid file_paths
     with pytest.raises(FileHandlerConstructionError):
         FileHandler(
-            file_paths=edge_value,
-            retry_limit=0,
-            retry_delay=0.0,
-            backoff_factor=0.0
+            file_paths=edge_value, retry_limit=0, retry_delay=0.0, backoff_factor=0.0
         )
 
 
@@ -102,44 +114,29 @@ def test_file_handler_edge_constructor_int(tmp_path, edge_value):
     temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
     # Test with invalid retry_limit
     with pytest.raises(FileHandlerConstructionError):
-        FileHandler(
-            temp_files,
-            retry_limit=edge_value
-        )
+        FileHandler(temp_files, retry_limit=edge_value)
 
     # Test with invalid max_file_size
     with pytest.raises(FileHandlerConstructionError):
-        FileHandler(
-            temp_files,
-            max_file_size=edge_value
-        )
+        FileHandler(temp_files, max_file_size=edge_value)
 
     # Test with invalid max_rotation
     with pytest.raises(FileHandlerConstructionError):
-        FileHandler(
-            temp_files,
-            max_rotation=edge_value
-    )
+        FileHandler(temp_files, max_rotation=edge_value)
 
 
 @pytest.mark.parametrize("edge_value", EDGE_FLOAT)
 def test_file_handler_edge_constructor_float(tmp_path, edge_value):
     """Test edge cases for FileHandler constructor."""
     temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
-    
+
     # Test with invalid retry_delay
     with pytest.raises(FileHandlerConstructionError):
-        FileHandler(
-            temp_files,
-            retry_delay=edge_value
-        )
+        FileHandler(temp_files, retry_delay=edge_value)
 
     # Test with invalid backoff_factor
     with pytest.raises(FileHandlerConstructionError):
-        FileHandler(
-            temp_files,
-            backoff_factor=edge_value
-        )
+        FileHandler(temp_files, backoff_factor=edge_value)
 
 
 def test_file_handler_edge_setters(fixture_file_handler: FileHandler):
@@ -181,7 +178,9 @@ def test_file_handler_edge_log(fixture_file_handler: FileHandler, edge_value):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("edge_value", EDGE_LOG)
-async def test_file_handler_edge_async_log(fixture_file_handler: FileHandler, edge_value):
+async def test_file_handler_edge_async_log(
+    fixture_file_handler: FileHandler, edge_value
+):
     """Test edge cases for FileHandler async log method."""
     # Test with invalid log message type
     with pytest.raises(FileHandlerAsyncWriteError):
@@ -191,6 +190,7 @@ async def test_file_handler_edge_async_log(fixture_file_handler: FileHandler, ed
 # ----------------------------------------------------------------------------------------------
 # Tests
 # ----------------------------------------------------------------------------------------------
+
 
 def test_file_handler_init(fixture_file_handler: FileHandler):
     """Test the initialization of FileHandler."""
@@ -238,33 +238,31 @@ def test_file_handler_log(fixture_file_handler: FileHandler, tmp_path):
     fixture_file_handler.file_paths = [temp_file_1, temp_file_2]
 
     # Call the log method
-    fixture_file_handler.log(
-        log_message
-    )
+    fixture_file_handler.log(log_message)
 
     # Force the file handler to flush the buffer
     fixture_file_handler.buffer_force_flush()
 
     # Check if the log message is written to the file
     for file_path in fixture_file_handler.file_paths:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
             assert log_message in content
-    
+
     fixture_file_handler.clear_sync_pool()
-    
+
 
 def test_file_handler_context_manager(fixture_file_handler: FileHandler, tmp_path):
     """Test the context manager functionality of FileHandler."""
     log_message = "Context manager log message for FileHandler"
     temp_file = tmp_path / "context_test.log"
-    
+
     with fixture_file_handler as handler:
         handler.file_paths = [temp_file]
         handler.log(log_message)
-        
+
     # Check if the log message is written to the file
-    with open(temp_file, 'r') as f:
+    with open(temp_file, "r") as f:
         content = f.read()
         assert log_message in content
 
@@ -283,16 +281,14 @@ async def test_file_handler_log_async(fixture_file_handler: FileHandler, tmp_pat
     fixture_file_handler.file_paths = [temp_file_1, temp_file_2]
 
     # Call the async log method
-    await fixture_file_handler.async_log(
-        log_message
-    )
+    await fixture_file_handler.async_log(log_message)
 
     # Force the file handler to flush the buffer
     fixture_file_handler.buffer_force_flush()
-    
+
     # Check if the log message is written to the file
     for file_path in fixture_file_handler.file_paths:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
             assert log_message in content
 
@@ -300,17 +296,19 @@ async def test_file_handler_log_async(fixture_file_handler: FileHandler, tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_file_handler_async_context_manager(fixture_file_handler: FileHandler, tmp_path):
+async def test_file_handler_async_context_manager(
+    fixture_file_handler: FileHandler, tmp_path
+):
     """Test the async context manager functionality of FileHandler."""
     log_message = "Async context manager log message for FileHandler"
     temp_file = tmp_path / "async_context_test.log"
-    
+
     async with fixture_file_handler as handler:
         handler.file_paths = [temp_file]
         await handler.async_log(log_message)
-        
+
     # Check if the log message is written to the file
-    with open(temp_file, 'r') as f:
+    with open(temp_file, "r") as f:
         content = f.read()
         assert log_message in content
 
@@ -324,12 +322,15 @@ async def test_file_handler_async_context_manager(fixture_file_handler: FileHand
 
 # Sync Performance Tests
 
+
 @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-def test_file_handler_log_batches(fixture_file_handler: FileHandler, tmp_path, batch_size: int):
+def test_file_handler_log_batches(
+    fixture_file_handler: FileHandler, tmp_path, batch_size: int
+):
     """
     Test the log_batches method of FileHandler.
 
-    Performance: 
+    Performance:
     --------------
     ### Specs:
     - RAM: 16 GB
@@ -340,8 +341,8 @@ def test_file_handler_log_batches(fixture_file_handler: FileHandler, tmp_path, b
     - Time taken to log 100 messages: 0.06 seconds.
     - Time taken to log 300 messages: 0.18 seconds.
     - Time taken to log 500 messages: 0.35 seconds.
-    - Time taken to log 1000 messages: 0.62 seconds.
-    - Time taken to log 2000 messages: 1.08 seconds.
+    - Time taken to log 1000 messages: 0.434 seconds.
+    - Time taken to log 2000 messages: 0.804 seconds.
     """
     log_message: str = "Batch log message for FileHandler"
 
@@ -354,9 +355,7 @@ def test_file_handler_log_batches(fixture_file_handler: FileHandler, tmp_path, b
 
     start_time: float = time.time()
     # Call the log_batches method
-    fixture_file_handler.log(
-        log_message
-    )
+    fixture_file_handler.log(log_message)
     end_time: float = time.time()
     elapsed_time: float = end_time - start_time
 
@@ -367,7 +366,7 @@ def test_file_handler_log_batches(fixture_file_handler: FileHandler, tmp_path, b
 
     # Check if the log message is written to the files
     for file_path in fixture_file_handler.file_paths:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
             assert log_message in content
 
@@ -375,7 +374,9 @@ def test_file_handler_log_batches(fixture_file_handler: FileHandler, tmp_path, b
 
 
 @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-def test_file_handler_cm_log_batches(fixture_file_handler: FileHandler, tmp_path, batch_size: int):
+def test_file_handler_cm_log_batches(
+    fixture_file_handler: FileHandler, tmp_path, batch_size: int
+):
     """
     Test the context manager log_batches method of FileHandler.
 
@@ -406,31 +407,36 @@ def test_file_handler_cm_log_batches(fixture_file_handler: FileHandler, tmp_path
 
     # Use context manager to log batches
     with fixture_file_handler as handler:
-        handler.log(
-            log_message
-        )
+        handler.log(log_message)
 
     end_time: float = time.time()
     elapsed_time: float = end_time - start_time
-    print(f"Time taken to log {batch_size} messages in context manager: {elapsed_time:.2f} seconds")
+    print(
+        f"Time taken to log {batch_size} messages in context manager: {elapsed_time:.3f} seconds"
+    )
 
     # Check if the log message is written to the files
     for file_path in fixture_file_handler.file_paths:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
             assert log_message in content
 
-    assert len(fixture_file_handler.file_paths) == 0, "File paths should be cleared after context manager exit"
+    assert (
+        len(fixture_file_handler.file_paths) == 0
+    ), "File paths should be cleared after context manager exit"
 
 
 # Sync With no Flush Performance Tests
 
+
 @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-def test_file_handler_log_batches_no_flush(fixture_file_handler: FileHandler, tmp_path, batch_size: int):
+def test_file_handler_log_batches_no_flush(
+    fixture_file_handler: FileHandler, tmp_path, batch_size: int
+):
     """
     Test the log_batches method of FileHandler - WITHOUT auto-flush.
 
-    Performance: 
+    Performance:
     --------------
     ### Specs:
     - RAM: 16 GB
@@ -457,9 +463,7 @@ def test_file_handler_log_batches_no_flush(fixture_file_handler: FileHandler, tm
     fixture_file_handler.write_mode = LogWriteMode.APPEND
 
     # Call the log_batches method
-    fixture_file_handler.log(
-        log_message
-    )
+    fixture_file_handler.log(log_message)
 
     start_time: float = time.time()
 
@@ -473,7 +477,7 @@ def test_file_handler_log_batches_no_flush(fixture_file_handler: FileHandler, tm
 
     # Check if the log message is written to the files
     for file_path in fixture_file_handler.file_paths:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
             assert log_message in content
 
@@ -481,7 +485,9 @@ def test_file_handler_log_batches_no_flush(fixture_file_handler: FileHandler, tm
 
 
 @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-def test_file_handler_cm_log_batches_no_flush(fixture_file_handler: FileHandler, tmp_path, batch_size: int):
+def test_file_handler_cm_log_batches_no_flush(
+    fixture_file_handler: FileHandler, tmp_path, batch_size: int
+):
     """
     Test the context manager log_batches method of FileHandler - WITHOUT auto-flush.
 
@@ -515,28 +521,33 @@ def test_file_handler_cm_log_batches_no_flush(fixture_file_handler: FileHandler,
 
     # Use context manager to log batches
     with fixture_file_handler as handler:
-        handler.log(
-            log_message
-        )
+        handler.log(log_message)
 
     end_time: float = time.time()
     elapsed_time: float = end_time - start_time
-    print(f"Time taken to log {batch_size} messages in context manager: {elapsed_time:.3f} seconds")
+    print(
+        f"Time taken to log {batch_size} messages in context manager: {elapsed_time:.3f} seconds"
+    )
 
     # Check if the log message is written to the files
     for file_path in fixture_file_handler.file_paths:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
             assert log_message in content
 
-    assert len(fixture_file_handler.file_paths) == 0, "File paths should be cleared after context manager exit"
+    assert (
+        len(fixture_file_handler.file_paths) == 0
+    ), "File paths should be cleared after context manager exit"
 
 
 # Async Performance Tests
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-async def test_file_handler_log_async_batches(fixture_file_handler: FileHandler, tmp_path, batch_size):
+async def test_file_handler_log_async_batches(
+    fixture_file_handler: FileHandler, tmp_path, batch_size
+):
     """
     Test the async log_batches method of FileHandler.
 
@@ -566,13 +577,8 @@ async def test_file_handler_log_async_batches(fixture_file_handler: FileHandler,
     # Set the write mode to append
     fixture_file_handler.write_mode = LogWriteMode.APPEND
 
-
     # Call the async log_batches method
-    await fixture_file_handler.async_log(
-        log_message
-    )
-
-    print(f"buffer size: {fixture_file_handler.get_buffer_size}")
+    await fixture_file_handler.async_log(log_message)
 
     start_time: float = time.time()
 
@@ -585,20 +591,24 @@ async def test_file_handler_log_async_batches(fixture_file_handler: FileHandler,
 
     # Check if the log message is written to the files
     for file_path in fixture_file_handler.file_paths:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
             assert log_message in content
-    
+
     # After flushing, the buffer should be empty
     fixture_file_handler.clear_all()
-    assert fixture_file_handler.get_buffer_size == 0, "Buffer should be empty after flush"
+    assert (
+        fixture_file_handler.get_buffer_size == 0
+    ), "Buffer should be empty after flush"
 
     print(f"Async log completed for {batch_size}")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-async def test_file_handler_cm_log_async_batches(fixture_file_handler: FileHandler, tmp_path, batch_size):
+async def test_file_handler_cm_log_async_batches(
+    fixture_file_handler: FileHandler, tmp_path, batch_size
+):
     """
     Test the async context manager log_batches method of FileHandler.
 
@@ -613,7 +623,7 @@ async def test_file_handler_cm_log_async_batches(fixture_file_handler: FileHandl
     - Time taken to log 100 messages: 0.11 seconds.
     - Time taken to log 300 messages: 0.28 seconds.
     - Time taken to log 500 messages: 0.48 seconds.
-    - Time taken to log 1000 messages: 1.12 seconds.
+    - Time taken to log 1000 messages: 0.83 seconds.
     - Time taken to log 2000 messages: 1.66 seconds.
     """
     log_message: str = "Async Context Manager Batch log message for FileHandler"
@@ -632,30 +642,35 @@ async def test_file_handler_cm_log_async_batches(fixture_file_handler: FileHandl
 
     # Use async context manager to log batches
     async with fixture_file_handler as handler:
-        await handler.async_log(
-            log_message
-        )
+        await handler.async_log(log_message)
 
     end_time: float = time.time()
     elapsed_time: float = end_time - start_time
-    print(f"Async time taken to log {batch_size} messages in context manager: {elapsed_time:.2f} seconds")
+    print(
+        f"Async time taken to log {batch_size} messages in context manager: {elapsed_time:.2f} seconds"
+    )
 
     # Check if the log message is written to the files
     for file_path in fixture_file_handler.file_paths:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
             assert log_message in content
 
     # After exiting the context, file_paths should be cleared
     fixture_file_handler.clear_all()
-    assert len(fixture_file_handler.file_paths) == 0, "File paths should be cleared after context manager exit"
+    assert (
+        len(fixture_file_handler.file_paths) == 0
+    ), "File paths should be cleared after context manager exit"
 
 
 # Async With no Flush Performance Tests
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-async def test_file_handler_log_async_batches_no_flush(fixture_file_handler: FileHandler, tmp_path, batch_size):
+async def test_file_handler_log_async_batches_no_flush(
+    fixture_file_handler: FileHandler, tmp_path, batch_size
+):
     """
     Test the async log_batches method of FileHandler - WITHOUT auto-flush.
 
@@ -689,9 +704,7 @@ async def test_file_handler_log_async_batches_no_flush(fixture_file_handler: Fil
     fixture_file_handler.write_mode = LogWriteMode.APPEND
 
     # Call the async log_batches method
-    await fixture_file_handler.async_log(
-        log_message
-    )
+    await fixture_file_handler.async_log(log_message)
 
     start_time: float = time.time()
 
@@ -704,20 +717,26 @@ async def test_file_handler_log_async_batches_no_flush(fixture_file_handler: Fil
 
     # Check if the log message is written to the files
     for file_path in fixture_file_handler.file_paths:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
             assert log_message in content
-    
+
     fixture_file_handler.clear_all()
-    assert fixture_file_handler.get_buffer_size == 0, "Buffer should be empty after flush"
-    assert len(fixture_file_handler.file_paths) == 0, "File paths should be cleared after async log"
+    assert (
+        fixture_file_handler.get_buffer_size == 0
+    ), "Buffer should be empty after flush"
+    assert (
+        len(fixture_file_handler.file_paths) == 0
+    ), "File paths should be cleared after async log"
 
     print(f"Async log completed for {batch_size}")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-async def test_file_handler_cm_log_async_batches_no_flush(fixture_file_handler: FileHandler, tmp_path, batch_size):
+async def test_file_handler_cm_log_async_batches_no_flush(
+    fixture_file_handler: FileHandler, tmp_path, batch_size
+):
     """
     Test the async context manager log_batches method of FileHandler - WITHOUT auto-flush.
 
@@ -729,10 +748,10 @@ async def test_file_handler_cm_log_async_batches_no_flush(fixture_file_handler: 
     - CPU: Intel Core i7-4510u
 
     ### Some Results:
-    - Time taken to log 100 messages: 0.11 seconds.
+    - Time taken to log 100 messages: 0.09 seconds.
     - Time taken to log 300 messages: 0.33 seconds.
     - Time taken to log 500 messages: 0.46 seconds.
-    - Time taken to log 1000 messages: 0.97 seconds.
+    - Time taken to log 1000 messages: 0.89 seconds.
     - Time taken to log 2000 messages: 1.45 seconds.
     """
     log_message: str = "Async Context Manager Batch log message for FileHandler"
@@ -754,26 +773,32 @@ async def test_file_handler_cm_log_async_batches_no_flush(fixture_file_handler: 
 
     # Use async context manager to log batches
     async with fixture_file_handler as handler:
-        await handler.async_log(
-            log_message
-        )
+        await handler.async_log(log_message)
 
     end_time: float = time.time()
     elapsed_time: float = end_time - start_time
-    print(f"Async time taken to log {batch_size} messages in context manager: {elapsed_time:.2f} seconds")
+    print(
+        f"Async time taken to log {batch_size} messages in context manager: {elapsed_time:.2f} seconds"
+    )
 
     # Check if the log message is written to the files
     for file_path in fixture_file_handler.file_paths:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
             assert log_message in content
 
-    assert len(fixture_file_handler.file_paths) == 0, "File paths should be cleared after context manager exit"
-    assert fixture_file_handler.get_buffer_size == 0, "Buffer should be empty after async log"
+    assert (
+        len(fixture_file_handler.file_paths) == 0
+    ), "File paths should be cleared after context manager exit"
+    assert (
+        fixture_file_handler.get_buffer_size == 0
+    ), "Buffer should be empty after async log"
+
 
 # ----------------------------------------------------------------------------------------------
 # Functionality Tests
 # ----------------------------------------------------------------------------------------------
+
 
 def test_file_rotation(fixture_file_handler, tmp_path):
     """Test file rotation when max size is exceeded."""
@@ -785,12 +810,12 @@ def test_file_rotation(fixture_file_handler, tmp_path):
     log_file = tmp_path / "small.log"
     fixture_file_handler.file_paths = [log_file]
     fixture_file_handler.max_file_size = 5  # Very small for testing
-    fixture_file_handler.max_rotation = 3 # Limit to 2 rotations
-    
+    fixture_file_handler.max_rotation = 3  # Limit to 2 rotations
+
     # Write enough to trigger rotation
     for i in range(700):
         fixture_file_handler.log(f"Long message {i} " * 10)
-    
+
     # Force the file handler to flush the buffer
     fixture_file_handler.buffer_force_flush()
 
@@ -798,7 +823,9 @@ def test_file_rotation(fixture_file_handler, tmp_path):
         # Check if rotation files exist in the tmp_path directory
         rotation_file_1 = tmp_path / "small_1.log"
         rotation_file_2 = tmp_path / "small_2.log"
-        assert (rotation_file_1.exists() or rotation_file_2.exists()), "Rotation files should exist"
+        assert (
+            rotation_file_1.exists() or rotation_file_2.exists()
+        ), "Rotation files should exist"
 
     finally:
         # Cleanup rotation files
@@ -807,32 +834,32 @@ def test_file_rotation(fixture_file_handler, tmp_path):
             if rotation_file.exists():
                 rotation_file.unlink()
 
-        
+
 def test_thread_safety(fixture_file_handler, tmp_path):
     """Test thread safety with concurrent writes."""
     temp_file = tmp_path / "thread_test.log"
     fixture_file_handler.file_paths = [temp_file]
-    
+
     def write_logs():
         for i in range(100):
             fixture_file_handler.log(f"Thread message {i}")
-    
+
     # Create multiple threads
     threads = [threading.Thread(target=write_logs) for _ in range(5)]
-    
+
     # Start all threads
     for thread in threads:
         thread.start()
-    
+
     # Wait for all threads to complete
     for thread in threads:
         thread.join()
 
     # Force the file handler to flush the buffer
     fixture_file_handler.buffer_force_flush()
-    
+
     # Verify all messages were written
-    with open(temp_file, 'r') as f:
+    with open(temp_file, "r") as f:
         content = f.read()
         assert content.count("Thread message") == 500
 
@@ -841,32 +868,32 @@ def test_memory_cleanup(tmp_path):
     """Test that file handles are properly cleaned up."""
     import gc
     import weakref
-    
+
     temp_file = tmp_path / "cleanup_test.log"
-    
-    handler: FileHandler = FileHandler(
-        file_paths=[temp_file]
-    )
-    
+
+    handler: FileHandler = FileHandler(file_paths=[temp_file])
+
     # Create weak reference to track cleanup
     weak_ref = weakref.ref(handler)
-    
+
     # Write some logs
     handler.log("test message")
-    
+
     # Force cleanup
     handler.buffer_force_flush()
     handler.clear_sync_pool()
     handler.force_shutdown()
-    
+
     # Delete reference to handler to allow garbage collection
     del handler
-    
+
     # Force garbage collection
     gc.collect()
-    
+
     # Verify cleanup
-    assert weak_ref() is None, "FileHandler should be cleaned up and weak reference should be None"
+    assert (
+        weak_ref() is None
+    ), "FileHandler should be cleaned up and weak reference should be None"
 
 
 @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -904,47 +931,54 @@ def test_memory_usage(tmp_path, batch_size: int):
         -   Memory difference for 2000 logs: 20.0 KB (0.02 MB)
     """
     print("Testing memory usage for batch size:", batch_size)
-    
+
     process = psutil.Process(os.getpid())
     initial_memory = process.memory_info().rss  # Resident Set Size
     initial_memory_mb = round(initial_memory / (1024 * 1024), 2)  # Convert to MB
     initial_memory_kb = round(initial_memory / 1024, 2)  # Convert to KB
 
-    print(f"Initial memory usage: {initial_memory} bytes ({initial_memory_kb} KB, {initial_memory_mb} MB)")
-    
+    print(
+        f"Initial memory usage: {initial_memory} bytes ({initial_memory_kb} KB, {initial_memory_mb} MB)"
+    )
+
     # Create a FileHandler instance
     temp_file = tmp_path / "memory_test.log"
-    handler: FileHandler = FileHandler(
-        file_paths=[temp_file]
-    )
-    
+    handler: FileHandler = FileHandler(file_paths=[temp_file])
+
     # Write some logs
     for i in range(batch_size):
         handler.log(f"Memory test message {i}")
-    
+
     # Force the file handler to flush the buffer
     handler.buffer_force_flush()
-    
+
     after_memory = process.memory_info().rss  # Resident Set Size after logging
     after_memory_mb = round(after_memory / (1024 * 1024), 2)  # Convert to MB
     after_memory_kb = round(after_memory / 1024, 2)  # Convert to KB
-    print(f"After memory usage: {after_memory} bytes ({after_memory_kb} KB, {after_memory_mb} MB)")
-
+    print(
+        f"After memory usage: {after_memory} bytes ({after_memory_kb} KB, {after_memory_mb} MB)"
+    )
 
     leak_memory_kb = round((after_memory - initial_memory) / 1024, 2)  # Convert to KB
-    leak_memory_mb = round((after_memory - initial_memory) / (1024 * 1024), 2)  # Convert to MB    
-    print(f"Memory difference for {batch_size} logs: {leak_memory_kb} KB ({leak_memory_mb} MB)")
+    leak_memory_mb = round(
+        (after_memory - initial_memory) / (1024 * 1024), 2
+    )  # Convert to MB
+    print(
+        f"Memory difference for {batch_size} logs: {leak_memory_kb} KB ({leak_memory_mb} MB)"
+    )
 
     # Cleanup
     handler.clear_all()
 
     assert len(handler.file_paths) == 0, "File paths should be cleared after operations"
-    
-    with open(temp_file, 'r') as f:
+
+    with open(temp_file, "r") as f:
         content = f.read()
         assert len(content) > 0, "Log file should not be empty after writing logs"
         for i in range(batch_size):
-            assert f"Memory test message {i}" in content, f"Log message {i} should be present in the file"
+            assert (
+                f"Memory test message {i}" in content
+            ), f"Log message {i} should be present in the file"
 
 
 @pytest.mark.asyncio
@@ -989,12 +1023,12 @@ async def test_memory_usage_async(tmp_path, batch_size: int):
     initial_memory_mb = round(initial_memory / (1024 * 1024), 2)  # Convert to MB
     initial_memory_kb = round(initial_memory / 1024, 2)  # Convert to KB
 
-    print(f"Initial memory usage: {initial_memory} bytes ({initial_memory_kb} KB, {initial_memory_mb} MB)")
+    print(
+        f"Initial memory usage: {initial_memory} bytes ({initial_memory_kb} KB, {initial_memory_mb} MB)"
+    )
     # Create a FileHandler instance
     temp_file = tmp_path / "async_memory_test.log"
-    handler: FileHandler = FileHandler(
-        file_paths=[temp_file]
-    )
+    handler: FileHandler = FileHandler(file_paths=[temp_file])
     # Write some logs asynchronously
     for i in range(batch_size):
         await handler.async_log(f"Async Memory test message {i}")
@@ -1004,31 +1038,40 @@ async def test_memory_usage_async(tmp_path, batch_size: int):
     after_memory = process.memory_info().rss  # Resident Set Size after logging
     after_memory_mb = round(after_memory / (1024 * 1024), 2)  # Convert to MB
     after_memory_kb = round(after_memory / 1024, 2)  # Convert to KB
-    print(f"After memory usage: {after_memory} bytes ({after_memory_kb} KB, {after_memory_mb} MB)")
+    print(
+        f"After memory usage: {after_memory} bytes ({after_memory_kb} KB, {after_memory_mb} MB)"
+    )
 
     leak_memory_kb = round((after_memory - initial_memory) / 1024, 2)  # Convert to KB
-    leak_memory_mb = round((after_memory - initial_memory) / (1024 * 1024), 2)  # Convert to MB
-    print(f"Memory difference for {batch_size} logs: {leak_memory_kb} KB ({leak_memory_mb} MB)")
+    leak_memory_mb = round(
+        (after_memory - initial_memory) / (1024 * 1024), 2
+    )  # Convert to MB
+    print(
+        f"Memory difference for {batch_size} logs: {leak_memory_kb} KB ({leak_memory_mb} MB)"
+    )
 
     # Cleanup
     handler.clear_all()
 
     assert len(handler.file_paths) == 0, "File paths should be cleared after operations"
 
-    with open(temp_file, 'r') as f:
+    with open(temp_file, "r") as f:
         content = f.read()
         assert len(content) > 0, "Log file should not be empty after writing logs"
         for i in range(batch_size):
-            assert f"Async Memory test message {i}" in content, f"Log message {i} should be present in the file"
+            assert (
+                f"Async Memory test message {i}" in content
+            ), f"Log message {i} should be present in the file"
 
 
 # ----------------------------------------------------------------------------------------------
 # Config Tests
 # ----------------------------------------------------------------------------------------------
 
+
 def test_file_handler_config(fixture_file_handler: FileHandler):
     """Test the configuration of FileHandler."""
-    
+
     fixture_file_handler.config(
         file_paths=[Path("config_test.log")],
         write_mode=LogWriteMode.WRITE_READ,
@@ -1036,7 +1079,7 @@ def test_file_handler_config(fixture_file_handler: FileHandler):
         retry_delay=0.5,
         backoff_factor=1.0,
         max_file_size=5 * 1024 * 1024,  # 5 MB
-        max_rotation=2
+        max_rotation=2,
     )
 
     assert fixture_file_handler.file_paths == [Path("config_test.log")]
@@ -1050,7 +1093,7 @@ def test_file_handler_config(fixture_file_handler: FileHandler):
 
 def test_file_handler_config_dict(fixture_file_handler: FileHandler):
     """Test the configuration of FileHandler with a dictionary."""
-    
+
     config_dict = {
         "file_paths": [Path("config_dict_test.log")],
         "write_mode": LogWriteMode.WRITE_READ,
@@ -1058,9 +1101,9 @@ def test_file_handler_config_dict(fixture_file_handler: FileHandler):
         "retry_delay": 0.5,
         "backoff_factor": 1.0,
         "max_file_size": 5 * 1024 * 1024,  # 5 MB
-        "max_rotation": 2
+        "max_rotation": 2,
     }
-    
+
     fixture_file_handler.config_dict(config_dict)
 
     assert fixture_file_handler.file_paths == [Path("config_dict_test.log")]
@@ -1074,7 +1117,7 @@ def test_file_handler_config_dict(fixture_file_handler: FileHandler):
 
 def test_file_handler_config_json(fixture_file_handler: FileHandler):
     """Test the configuration of FileHandler with a JSON file."""
-    
+
     config_json = {
         "file_paths": ["config_json_test.log"],
         "write_mode": LogWriteMode.APPEND,
@@ -1082,11 +1125,11 @@ def test_file_handler_config_json(fixture_file_handler: FileHandler):
         "retry_delay": 0.5,
         "backoff_factor": 1.0,
         "max_file_size": 5 * 1024 * 1024,  # 5 MB
-        "max_rotation": 2
+        "max_rotation": 2,
     }
 
     json_str = json.dumps(config_json)
-    
+
     fixture_file_handler.config_json(json_str)
 
     assert fixture_file_handler.file_paths == [Path("config_json_test.log")]
@@ -1096,11 +1139,11 @@ def test_file_handler_config_json(fixture_file_handler: FileHandler):
     assert fixture_file_handler.backoff_factor == pytest.approx(1.0)
     assert fixture_file_handler.max_file_size == 5 * 1024 * 1024  # 5 MB
     assert fixture_file_handler.max_rotation == 2
-    
+
 
 def test_file_handler_config_yaml(fixture_file_handler: FileHandler):
     """Test the configuration of FileHandler with a YAML file."""
-    
+
     config_yaml = {
         "file_paths": ["config_yaml_test.log"],
         "write_mode": LogWriteMode.WRITE_READ.value,
@@ -1108,11 +1151,11 @@ def test_file_handler_config_yaml(fixture_file_handler: FileHandler):
         "retry_delay": 0.5,
         "backoff_factor": 1.0,
         "max_file_size": 5 * 1024 * 1024,  # 5 MB
-        "max_rotation": 2
+        "max_rotation": 2,
     }
 
     yaml_str = yaml.dump(config_yaml)
-    
+
     fixture_file_handler.config_yaml(yaml_str)
 
     assert fixture_file_handler.file_paths == [Path("config_yaml_test.log")]
@@ -1163,13 +1206,15 @@ def test_file_handler_long_message(fixture_file_handler: FileHandler):
     print(f"Time taken to log long message: {elapsed_time:.3f} seconds")
 
     # Check if the long message is written to the file
-    with open(temp_file, 'r') as f:
+    with open(temp_file, "r") as f:
         content = f.read()
         assert long_message in content
 
 
 @pytest.mark.asyncio
-async def test_file_handler_async_long_message(fixture_file_handler: FileHandler, tmp_path):
+async def test_file_handler_async_long_message(
+    fixture_file_handler: FileHandler, tmp_path
+):
     """
     Test FileHandler with a very long message in async mode.
 
@@ -1205,31 +1250,40 @@ async def test_file_handler_async_long_message(fixture_file_handler: FileHandler
     print(f"Async time taken to log long message: {elapsed_time:.3f} seconds")
 
     # Check if the long message is written to the file
-    with open(temp_file, 'r') as f:
+    with open(temp_file, "r") as f:
         content = f.read()
         assert long_message in content
 
     fixture_file_handler.clear_all()
-    assert len(fixture_file_handler.file_paths) == 0, "File paths should be cleared after async log"
+    assert (
+        len(fixture_file_handler.file_paths) == 0
+    ), "File paths should be cleared after async log"
 
 
 # ----------------------------------------------------------------------------------------------
 # Magic Method Tests
 # ----------------------------------------------------------------------------------------------
 
+
 def test_file_handler_magic_methods(fixture_file_handler: FileHandler, tmp_path):
     """Test the magic methods of FileHandler."""
-    
+
     # Test __str__
     str_repr = str(fixture_file_handler)
-    assert "FileHandler" in str_repr, "__str__ method should return a string representation of FileHandler"
+    assert (
+        "FileHandler" in str_repr
+    ), "__str__ method should return a string representation of FileHandler"
 
     # Test __repr__
     repr_repr = repr(fixture_file_handler)
-    assert "FileHandler" in repr_repr, "__repr__ method should return a detailed representation of FileHandler"
+    assert (
+        "FileHandler" in repr_repr
+    ), "__repr__ method should return a detailed representation of FileHandler"
 
     # Test __len__
-    assert len(fixture_file_handler) == 2, "__len__ method should return the number of file paths (2 initially)"
+    assert (
+        len(fixture_file_handler) == 2
+    ), "__len__ method should return the number of file paths (2 initially)"
 
     # Test __eq__
     temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
@@ -1237,18 +1291,21 @@ def test_file_handler_magic_methods(fixture_file_handler: FileHandler, tmp_path)
         file_paths=temp_files,  # Use temp files
         retry_limit=0,
         retry_delay=0.0,
-        backoff_factor=0.0
+        backoff_factor=0.0,
     )
-    assert fixture_file_handler == handler, "__eq__ method should compare file paths and other attributes"
-    
+    assert (
+        fixture_file_handler == handler
+    ), "__eq__ method should compare file paths and other attributes"
+
     # Test __iter__
     for file_path in fixture_file_handler:
         assert isinstance(file_path, Path), "__iter__ method should yield Path objects"
-    
+
     # Test __contains__
-    assert fixture_file_handler.file_paths[0] in fixture_file_handler, "__contains__ method should check if a file path is in the handler"
+    assert (
+        fixture_file_handler.file_paths[0] in fixture_file_handler
+    ), "__contains__ method should check if a file path is in the handler"
 
     # Test __del__
     del fixture_file_handler  # This should not raise any exceptions
     del handler  # This should not raise any exceptions either
-    

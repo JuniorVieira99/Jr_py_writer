@@ -53,3 +53,5 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py", "tests_*.py"]
 addopts = "-v -s -W default --benchmark-enable --benchmark-json=test/benchmark_json/my_benchmark.json " 
 benchmark_disable = "data"
+benchmark_warmup = true
+benchmark_min-rounds = 3

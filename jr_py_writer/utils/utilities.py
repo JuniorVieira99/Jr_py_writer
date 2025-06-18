@@ -24,6 +24,7 @@ import psutil
 # Classes Definitions
 # ---------------------------------------------------------------------------------------------
 
+
 class GCManager:
     """
     GCManager
@@ -56,7 +57,13 @@ class GCManager:
     # ------------
     # Slots
 
-    __slots__ = ('_monitoring','_wait_time', '_sync_thread', '_async_thread' ,'_memory_threshold')
+    __slots__ = (
+        "_monitoring",
+        "_wait_time",
+        "_sync_thread",
+        "_async_thread",
+        "_memory_threshold",
+    )
 
     # ------------
     # Attributes
@@ -79,7 +86,7 @@ class GCManager:
     def wait_time(self) -> float:
         """Returns the wait time for the garbage collection manager."""
         return self._wait_time
-    
+
     @property
     def sync_thread(self) -> Optional[Thread]:
         """Returns the thread associated with the garbage collection manager."""
@@ -132,18 +139,20 @@ class GCManager:
         if not isinstance(value, (int, float)):
             raise ValueError("Memory threshold must be a number.")
         if not (0.0 <= value <= 1.0):
-            raise ValueError("Memory threshold must be between 0.0 and 1.0 (inclusive).")
+            raise ValueError(
+                "Memory threshold must be between 0.0 and 1.0 (inclusive)."
+            )
         self._memory_threshold = float(value)
 
     # ------------
     # Constructor
 
     def __init__(
-        self, 
-        wait_time: float = 0.1,  # Default wait time of 100ms    
-        memory_threshold: float = 0.80  # Default to 80% memory usage threshold
+        self,
+        wait_time: float = 0.1,  # Default wait time of 100ms
+        memory_threshold: float = 0.80,  # Default to 80% memory usage threshold
     ) -> None:
-        
+
         self._monitoring = True
         self.wait_time = wait_time
         self.memory_threshold = memory_threshold
@@ -155,8 +164,7 @@ class GCManager:
 
     def __str__(self):
         return f"GCManager(monitoring={self.monitoring}, wait_time={self.wait_time}, memory_threshold={self.memory_threshold})"
-    
-    
+
     def __enter__(self):
         """
         Enter the context manager, disabling garbage collection and starting memory monitoring.
@@ -182,7 +190,6 @@ class GCManager:
 
         return self
 
-
     def __exit__(self, exc_type, exc_value, traceback):
         """
         Exit the context manager, stopping memory monitoring and enabling garbage collection.
@@ -205,7 +212,6 @@ class GCManager:
 
         return False
 
-
     def __aenter__(self):
         """
         Enter the asynchronous context manager, disabling garbage collection and starting memory monitoring.
@@ -214,7 +220,7 @@ class GCManager:
         # Safe check
         mem = psutil.virtual_memory()
         if mem.percent > self.memory_threshold:
-            gc.collect()        
+            gc.collect()
 
         # Disable garbage collection if it is enabled
         if gc.isenabled():
@@ -227,11 +233,12 @@ class GCManager:
                 self.async_thread = asyncio.create_task(self.async_memory_observer())
             # Check if the async task is running and start it if not
             if self.async_thread is not None and not self.async_thread.done():
-                self.async_thread = asyncio.get_event_loop().create_task(self.async_memory_observer())
+                self.async_thread = asyncio.get_event_loop().create_task(
+                    self.async_memory_observer()
+                )
         # Return the context manager
         return self
-    
-    
+
     async def __aexit__(self, exc_type, exc_value, traceback):
         """
         Exit the asynchronous context manager, stopping memory monitoring and enabling garbage collection.
@@ -239,12 +246,12 @@ class GCManager:
         """
         # Stop monitoring
         self.monitoring = False
-        
+
         # Get the result of the async task
         result = self.async_thread.result() if self.async_thread is not None else None
         if result is not None:
             raise result
-        
+
         # Cancel the async task if it is running
         if self.async_thread is not None and not self.async_thread.done():
             self.async_thread.cancel()
@@ -252,9 +259,8 @@ class GCManager:
         # Enable garbage collection if it was disabled
         if not gc.isenabled():
             gc.enable()
-        
-        return False
 
+        return False
 
     # ------------
     # Methods
@@ -262,7 +268,7 @@ class GCManager:
     def memory_observer(self) -> None:
         """
         Monitors memory usage and prints it to the console.
-        
+
         This method runs in a separate thread and continuously prints the current memory usage.
         """
         try:
@@ -275,12 +281,11 @@ class GCManager:
                 time.sleep(self.wait_time)  # Sleep for a while to avoid busy waiting
         except Exception as e:
             raise RuntimeError(f"Error in memory observer thread: {e}") from e
-        
-        
+
     async def async_memory_observer(self) -> None:
         """
         Monitors asynchronously memory usage and prints it to the console.
-        
+
         This method runs in a separate thread and continuously prints the current memory usage.
         """
         try:
@@ -290,15 +295,16 @@ class GCManager:
                     gc.collect()
                 if not self._monitoring:
                     break
-                await asyncio.sleep(self.wait_time)  # Sleep for a while to avoid busy waiting
+                await asyncio.sleep(
+                    self.wait_time
+                )  # Sleep for a while to avoid busy waiting
         except Exception as e:
             raise RuntimeError(f"Error in memory observer thread: {e}") from e
-
 
     def force_gc(self) -> None:
         """
         Forces garbage collection.
-        
+
         This method can be called to manually trigger garbage collection.
         """
         gc.collect()
@@ -307,6 +313,7 @@ class GCManager:
 # ---------------------------------------------------------------------------------------------
 # Function Definitions
 # ---------------------------------------------------------------------------------------------
+
 
 def _calculate_batch_size(data: Union[List, Tuple, Set], batch_size: int) -> int:
     """
@@ -320,45 +327,45 @@ def _calculate_batch_size(data: Union[List, Tuple, Set], batch_size: int) -> int
 
     Returns:
         int: The calculated batch size.
-    
+
     Notes:
         - For small datasets (< 1000), batch size is small but at least 1
         - For larger datasets, batch size scales proportionally to data length
         - The scaling is designed to balance memory usage and processing efficiency
     """
     data_len = len(data)
-    
+
     # Use CPU count as default if batch_size is not positive
     if batch_size <= 0:
         batch_size = max(os.cpu_count() or 1, 1)
-    
+
     # Return data length if batch size exceeds it
     if batch_size >= data_len:
         return data_len
-    
+
     # Scaling factors based on data size
     if data_len < 1000:
         return max(batch_size, 1)
-    
+
     scaling_table = [
-        (10_000, 2, 4),      # (max_size, multiplier, divisor)
+        (10_000, 2, 4),  # (max_size, multiplier, divisor)
         (100_000, 4, 8),
         (1_000_000, 8, 16),
         (10_000_000, 16, 32),
     ]
-    
+
     for max_size, multiplier, divisor in scaling_table:
         if data_len <= max_size:
             return max(batch_size * multiplier, data_len // divisor)
-    
+
     # For very large datasets (> 10M elements)
     return max(batch_size * 32, data_len // 64)
 
 
 def universal_wrapper(
-    exception_class: type[Exception], 
+    exception_class: type[Exception],
     logger: Optional[logging.Logger] = None,
-    use_sys_std: bool = False
+    use_sys_std: bool = False,
 ) -> Callable:
     """
     A decorator to wrap a function and catch exceptions of a specific class.
@@ -379,9 +386,11 @@ def universal_wrapper(
         pass
     ```
     """
+
     def decorator(func):
         # Check if the function is a coroutine function
         if asyncio.iscoroutinefunction(func):
+
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
                 try:
@@ -396,12 +405,16 @@ def universal_wrapper(
                             f"An error occurred in {func.__name__}\n"
                             f"Exception type: {e.__class__.__name__}\n"
                             f"Exception message: {e}",
-                            file=sys.stderr
+                            file=sys.stderr,
                         )
-                    raise exception_class(f"An error {e.__class__.__name__} occurred in {func.__name__}:\n\t{e}") from e
+                    raise exception_class(
+                        f"An error {e.__class__.__name__} occurred in {func.__name__}:\n\t{e}"
+                    ) from e
+
             return async_wrapper
         # If the function is not a coroutine, use a regular wrapper
         else:
+
             @wraps(func)
             def wrapper(*args, **kwargs):
                 try:
@@ -416,10 +429,14 @@ def universal_wrapper(
                             f"An error occurred in {func.__name__}\n"
                             f"Exception type: {e.__class__.__name__}\n"
                             f"Exception message: {e}",
-                            file=sys.stderr
+                            file=sys.stderr,
                         )
-                    raise exception_class(f"An error {e.__class__.__name__} occurred in {func.__name__}:\n\t{e}") from e
+                    raise exception_class(
+                        f"An error {e.__class__.__name__} occurred in {func.__name__}:\n\t{e}"
+                    ) from e
+
             return wrapper
+
     return decorator
 
 
@@ -444,11 +461,12 @@ def performance_monitor(operation: str):
 # Synchronous Batcher
 # ---------------------------------------------------------------------------------------------
 
+
 def batcher_with_gcmanager(
     data: Iterable,
-    batch_size: int = -1, # Default to -1 which will calculate batch size based on CPU cores
+    batch_size: int = -1,  # Default to -1 which will calculate batch size based on CPU cores
     max_memory_usage: float = 0.80,  # Default to 80% memory usage threshold
-    wait_time: float = 0.1 # Default wait time of 100ms
+    wait_time: float = 0.1,  # Default wait time of 100ms
 ) -> Generator[List[Any], None, None]:
     """
     batcher_with_gcmanager
@@ -472,31 +490,35 @@ def batcher_with_gcmanager(
         list: A list containing a batch of items from the input data.
     """
 
-    if not isinstance(max_memory_usage, (int, float)) or not (0.0 <= max_memory_usage <= 1.0):
-        raise ValueError("max_memory_usage must be a number between 0.0 and 1.0 (inclusive).")
-    
+    if not isinstance(max_memory_usage, (int, float)) or not (
+        0.0 <= max_memory_usage <= 1.0
+    ):
+        raise ValueError(
+            "max_memory_usage must be a number between 0.0 and 1.0 (inclusive)."
+        )
+
     if not isinstance(wait_time, (int, float)) or wait_time < 0:
         raise ValueError("wait_time must be a non-negative integer or float.")
-    
+
     if not isinstance(batch_size, int):
         raise TypeError("Batch size must be an integer.")
-    
+
     if not isinstance(data, (list, tuple, set)):
         raise TypeError("Data must be an iterable (list, tuple, or set).")
-    
+
     if len(data) == 0:
         raise ValueError("Data cannot be empty.")
 
     if batch_size <= 0:
         batch_size = _calculate_batch_size(data, batch_size)
-    
+
     if batch_size >= len(data):
         yield list(data)
         return
-    
+
     if wait_time <= 0:
         wait_time = 0.1
-    
+
     iter_data = iter(data)
 
     with GCManager(memory_threshold=max_memory_usage, wait_time=wait_time):
@@ -507,10 +529,7 @@ def batcher_with_gcmanager(
             yield batch
 
 
-def batcher(
-    data: Iterable,
-    batch_size: int = -1
-) -> Generator[List[Any], None, None]:
+def batcher(data: Iterable, batch_size: int = -1) -> Generator[List[Any], None, None]:
     """
     batcher
     =======
@@ -532,7 +551,7 @@ def batcher(
 
     if not isinstance(batch_size, int):
         raise TypeError("Batch size must be an integer.")
-    
+
     if not isinstance(data, (list, tuple, set)):
         raise TypeError("Data must be an list,tuple or set.")
 
@@ -541,11 +560,11 @@ def batcher(
 
     if batch_size <= 0:
         batch_size = _calculate_batch_size(data, batch_size)
-    
+
     if batch_size >= len(data):
         yield list(data)
         return
-    
+
     iter_data = iter(data)
 
     while True:
@@ -553,4 +572,3 @@ def batcher(
         if not batch:
             break
         yield batch
-
