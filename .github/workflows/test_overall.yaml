@@ -34,8 +34,8 @@ jobs:
       - name: Ensure pip cache directory exists (Windows)
         if: runner.os == 'Windows'
         run: |
-          if (!(Test-Path -Path "$env:USERPROFILE\.cache\pip")) {
-            New-Item -ItemType Directory -Path "$env:USERPROFILE\.cache\pip" | Out-Null
+          if (!(Test-Path -Path "$env:LOCALAPPDATA\pip\cache")) {
+            New-Item -ItemType Directory -Path "$env:LOCALAPPDATA\pip\cache" | Out-Null
           }
           
       - name: Install uv (Unix)
