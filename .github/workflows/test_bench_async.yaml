@@ -1,0 +1,66 @@
+name: tests_bench_async
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.12", "3.13"]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Ensure pip cache directory exists (Unix)
+        if: runner.os != 'Windows'
+        run: mkdir -p $HOME/.cache/pip
+
+      - name: Ensure pip cache directory exists (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if (!(Test-Path -Path "$env:LOCALAPPDATA\pip\cache")) {
+            New-Item -ItemType Directory -Path "$env:LOCALAPPDATA\pip\cache" | Out-Null
+          }
+
+      - name: Install uv (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install uv (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          powershell -Command "Invoke-RestMethod -Uri https://astral.sh/uv/install.ps1 | Invoke-Expression"
+          echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv sync
+          uv pip install -e .
+
+      - name: Run sync bench tests
+        run: |
+          uv run pytest test/test_bench_async_file_handler.py --benchmark-enable
+
+      - name: Post job cleanup
+        if: always()
+        run: |
+          echo "Post job cleanup step"
