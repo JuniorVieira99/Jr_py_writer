@@ -11,7 +11,7 @@ from enum import StrEnum
 
 class LogWriteMode(StrEnum):
     """
-    String Enum for log write modes.
+    String Enum for log write and read modes.
 
     Attributes:
         APPEND (str | a): Append mode, adds to the end of the file.

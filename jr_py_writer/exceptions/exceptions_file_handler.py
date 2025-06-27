@@ -46,6 +46,16 @@ class FileHandlerWriteError(FileHandlerException):
     pass
 
 
+class FileHandlerReadError(FileHandlerException):
+    """Raised when there is an error reading from the file handler."""
+
+    pass
+
+class FileHandlerAsyncReadError(FileHandlerException):
+    """Raised when there is an error reading asynchronously from the file handler."""
+
+    pass
+
 class FileHandlerAsyncWriteError(FileHandlerException):
     """Raised when there is an error writing asynchronously to the file handler."""
 
