@@ -23,8 +23,6 @@ import yaml
 # Utilities
 from jr_py_writer.utils.utilities import batcher, batcher_with_gcmanager
 from jr_py_writer.utils.module_enums import LogWriteMode
-from jr_py_writer.classes.reader_result import ReaderResultGenerator, ReaderResultStr
-from jr_py_writer.classes.reader_result_pack import ReaderResultPack
 
 # Exceptions
 from jr_py_writer.exceptions.exceptions_file_reader import (
@@ -32,7 +30,6 @@ from jr_py_writer.exceptions.exceptions_file_reader import (
     FileReaderSettingsError,
     FileReaderReadError,
     FileReaderAsyncReadError,
-    FileReaderSyncPoolInitError,
     FileReaderSyncPoolCleanupError,
     FileReaderShutdownError,
     FileReaderResumeError,
@@ -66,22 +63,32 @@ class FileReader:
     Otherwise, you must call `clear_all()` to release resources and close files properly.
     Example usage:
     ```python
-    with FileReader(file_paths=["file1.txt", "file2.txt"]) as reader:
-        content = reader.read_log()
+    # Synchronous reading
+    with FileReader(file_paths=["file1.txt", "file2.txt"]) as fr:
+        content = fr.read()
+    
+    # Asynchronous reading
+    async with FileReader(file_paths=["file1.txt", "file2.txt"]) as fr
+        content = await fr.async_read()
     ```
     or
     ```python
     reader = FileReader(file_paths=["file1.txt", "file2.txt"])
-    content = reader.read_log()
+    content = reader.read()
+    # Always remember to clear resources and close files
     reader.clear_all()
     ```
 
     Notes:
     ------
+    - Uses the `ReaderResultPack` class to store results of file reading operations.
+    - Each file read operation will return a `ReaderResult` object containing:
+        - The file path.
+        - The content of the file as a string or a generator.
+        - An exception if an error occurred during reading.
+    - **Check docs for `ReaderResultPack` class for more details on how to access results.**
     - Will automatically handle error of path not found, file not readable, etc.
-        - Error will be presented in the dictionary as the value for the path.
     - Supports both synchronous and asynchronous reading of files.
-    - Provides a generator-based approach for reading files line by line.
 
     Attributes:
         file_paths (List[Path]):
@@ -100,27 +107,51 @@ class FileReader:
     Example:
         ```python
         # Initialize FileReader with file paths
-        file_paths = [Path("file1.txt"), Path("file2.txt")]
-        reader = FileReader(file_paths=file_paths, write_mode=LogWriteMode.READ)
+        my_file_reader = FileReader(
+            file_paths=["file1.txt", "file2.txt"], # Will be converted to Path objects
+            retry_limit=3,
+            retry_delay=0.5,
+            backoff_factor=0.1
+        )
         
         # Read files synchronously
-        with reader:
-            content: Dict[Path, str] = reader.read_log() 
-
-        # Manual iteration over generators
-        for path, gen in generator_content.items():
-            print(f"Content of {path} (line by line):")
-            for line in gen:
-                print(line)
-
-        # You can also use the `unpacker` utility to unpack the generator content
-        result: Dict[Path, str] = reader.unpack_generator(generator_content)
+        with my_file_reader as fr:
+            result_pack: ReaderResultPack = fr.read()
 
         # Read files asynchronously
         async def read_files_async():
-            async with reader:
-                async_content: Dict[Path, str] = await reader.async_read_log()
+            async with my_file_reader as fr:
+                result_pack: ReaderResultPack = await fr.async_read()
+        # Run the async function
         asyncio.run(read_files_async())
+
+        # Access results manually
+        for result in result_pack.get_all_results:
+            if result.exception:
+                print(f"Error reading {result.file_path}: {result.exception}")
+            else:
+                print(f"Content of {result.file_path}: {result.content}")
+
+        # Access results with properties
+
+        # Get summary of results
+        summary = result_pack.get_summary
+        print(summary)
+        # Or
+        result_pack.print_summary()
+
+        # Get count of successful and failed results
+        successful_count = result_pack.get_successful_count
+        failed_count = result_pack.get_failed_count
+
+        # Get all results
+        all_results = result_pack.get_all_results
+
+        # Get successful results
+        successful_results = result_pack.get_successful_results
+
+        # Get failed results
+        failed_results = result_pack.get_failed_results
         
         # Shutdown thread pool
         reader.force_shutdown()
@@ -449,6 +480,7 @@ class FileReader:
             f"retry_delay={self.retry_delay})"
         )
 
+
     def __eq__(self, other: object) -> bool:
         """
         Checks if two FileReader instances are equal.
@@ -468,6 +500,7 @@ class FileReader:
             and self.retry_delay == other.retry_delay
         )
 
+
     def __ne__(self, other: object) -> bool:
         """
         Checks if two FileReader instances are not equal.
@@ -480,6 +513,7 @@ class FileReader:
         """
         return not self.__eq__(other)
 
+
     def __len__(self) -> int:
         """
         Returns the number of file paths in the FileReader.
@@ -488,6 +522,7 @@ class FileReader:
             int: The number of file paths.
         """
         return len(self.file_paths)
+
 
     def __iter__(self) -> Iterator[Path]:
         """
@@ -499,6 +534,7 @@ class FileReader:
         if self.file_paths is None:
             raise ValueError("File paths list is empty. Cannot iterate.")
         return iter(self.file_paths)
+
 
     def __del__(self):
         """Cleanup resources when object is destroyed."""
@@ -518,6 +554,7 @@ class FileReader:
         except Exception:
             pass
 
+
     def __contains__(self, item: Path) -> bool:
         """
         Checks if a file path is in the FileReader.
@@ -532,11 +569,13 @@ class FileReader:
             raise ValueError(f"Item must be a Path object, got {type(item).__name__}")
         return item in self.file_paths
 
+
     def __enter__(self):
         """
         Context manager enter method for FileReader.
         """
         return self
+
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
@@ -559,11 +598,13 @@ class FileReader:
         if exc_type is not None:
             return False
 
+
     async def __aenter__(self):
         """
         Asynchronous context manager enter method for FileReader.
         """
         return self
+
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """
@@ -625,49 +666,6 @@ class FileReader:
                 f"Error clearing sync pool: {e.__class__.__name__} -> {e}"
             ) from e
         
-
-    # --------------
-    # ResultPack Handler
-
-    def _result_pack_handler(
-        self,
-        result_pack: ReaderResultPack,
-        content: str,
-        path,
-        exception: Exception | None = None
-    ) -> ReaderResultPack:
-        """
-        Handle the result pack by adding a ReaderResult to it.
-
-        Arguments:
-            result_pack (ReaderResultPack): The result pack to add the result to.
-            content (str): The content of the file.
-            path (Path): The file path for logging.
-            exception (Exception | None): An optional exception that occurred during reading.
-
-        Returns:
-            out (ReaderResultPack) : The updated result pack with the new ReaderResult.
-        """
-        if len(content) == 0 and exception is None:
-            self.logger.warning(f"File {path} is empty.")
-            result_pack.add_result(
-                ReaderResult(
-                    file_path=path,
-                    content="",
-                    exception=FileReaderReadError(f"File {path} is empty.")
-                )
-            )
-        else:
-            result_pack.add_result(
-                ReaderResult(
-                    file_path=path,
-                    content=content,
-                    exception=exception
-                )
-            )
-       
-        return result_pack
-
 
     # --------------
     # File Reading Methods
@@ -738,7 +736,7 @@ class FileReader:
         return ""
 
 
-    def _read_batch(self, path_batch: List[Path]) -> ReaderResultPack:
+    def _read_batch(self, path_batch: List[Path]) -> Dict[Path, str | Exception]:
         """
         Read the content of a batch of files.
 
@@ -746,31 +744,26 @@ class FileReader:
             path_batch (List[Path]): The list of file paths to read from.
 
         Returns:
-            out (ReaderResultPack) : A pack of ReaderResult objects containing file paths and their content or exceptions.
+            out (Dict[Path, str | Exception]) : A dictionary mapping file paths to their content or exceptions.
         """
-        result_pack: ReaderResultPack = ReaderResultPack()
+        output: Dict[Path, str | Exception] = {}
         for path in path_batch:
             try:
                 out_str: str = self._read_file_prep(path)
                 # Update the results dictionary with the ReaderResult
-                result_pack = self._result_pack_handler(
-                    result_pack=result_pack,
-                    content=out_str,
-                    path=path
-                )
+                if path in output:
+                    self.logger.warning(
+                        f"File {path} already exists in output, overwriting content."
+                    )
+                output[path] = out_str
                 
             except Exception as e:
                 self.logger.error(f"Error reading file {path}: {e}")
                 # If an exception occurs, log it and set the exception in results
-                result_pack = self._result_pack_handler(
-                    result_pack=result_pack,
-                    content="",
-                    path=path,
-                    exception=FileReaderReadError(
+                output[path] = FileReaderReadError(
                         f"Error reading file {path}: {e.__class__.__name__} -> {e}"
                     )
-                )
-        return result_pack
+        return output
 
 
     def _read_file_prep(self, path: Path) -> str:
@@ -822,12 +815,12 @@ class FileReader:
 
     def _reader(
         self
-    ) -> ReaderResultPack:
+    ) -> Dict[Path, str | Exception]:
         """
         Read the content of all files in the file paths.
 
         Returns:
-            out (ReaderResultPack) : A pack of ReaderResult objects containing file paths and their content or exceptions.
+            out (Dict[Path, str | Exception]) : A dictionary mapping file paths to their content or exceptions.
         """
         # Send to ThreadPool
         futures = {
@@ -835,7 +828,7 @@ class FileReader:
         }
 
         # Initialize Dict
-        result_pack: ReaderResultPack = ReaderResultPack()
+        output: Dict[Path, str | Exception] = {}
         
         # Handle Results from the futures
         for future in as_completed(futures):
@@ -844,42 +837,33 @@ class FileReader:
             try:
                 # Get the output string from the future
                 out_str: str = future.result()
-                # Update the results dictionary with the ReaderResult
-                result_pack = self._result_pack_handler(
-                    result_pack=result_pack,
-                    content=out_str,
-                    path=path
-                )
+                # Update the results dictionary
+                output[path] = out_str
                 
             # If an exception occurs, log it and set the exception in results
             except Exception as e:
                 self.logger.error(f"Error reading files : {e.__class__.__name__} -> {e}")
-                # Update the result pack with the exception
-                result_pack = self._result_pack_handler(
-                    result_pack=result_pack,
-                    content="",
-                    path=path,
-                    exception=FileReaderReadError(
+                # Update the dictionary with the exception
+                output[path] = FileReaderReadError(
                         f"Error reading file: {e.__class__.__name__} -> {e}"
-                    )
-                )
-        return result_pack
+                    )           
+        return output
 
 
-    def _reader_handler(self) -> ReaderResultPack:
+    def _reader_handler(self) ->  Dict[Path, str | Exception]:
         """
         Read the content of all files in the file paths in batches.
 
         Returns:
-            out (ReaderResultPack) : A pack of ReaderResult objects containing file paths and their content or exceptions.
+            out (Dict[Path, str | Exception]) : A dictionary mapping file paths to their content or exceptions.
         """
         # If the number of file paths is less than 50, use the _reader method.
         if len(self.file_paths) < 50:
-            result_pack: ReaderResultPack = self._reader()
+            out_dict: Dict[Path, str | Exception] = self._reader()
             self.logger.debug(
-                f"Read {len(result_pack)} files successfully."
+                f"Read {len(out_dict)} files successfully."
             )
-            return result_pack
+            return out_dict
         
         # Initialize batches of paths
         batches_of_paths: List[List[Path]] = []
@@ -900,43 +884,27 @@ class FileReader:
             for path_batch in batches_of_paths
         }
 
-        # Initialize ReaderResultPack
-        result_pack: ReaderResultPack = ReaderResultPack()
+        # Initialize Dictionary
+        output: Dict[Path, str | Exception] = {}
 
         # Handle the results from the futures
         for future in as_completed(futures):
-            paths: List[Path] = futures[future]
-            for path in paths:
-                try:
-                    # Get the result from the future
-                    out_result: ReaderResultPack = future.result()
-                    # Update the result pack with the ReaderResultPack
-                    # Magic method add allows this
-                    result_pack += out_result
+            try:
+                # Get the result from the future
+                out_result: Dict[Path, str | Exception] = future.result()
+                # Update the dictionary
+                output.update(out_result)
 
-                # Safely measure only, this is unlikely to happen since we handle exceptions in the level 
-                # of creation of the ReaderResultPack
-                except Exception as e:
-                    self.logger.error(f"Error reading files in batch: {e}")
-                    # If an exception occurs, log it and set the exception in results
-                    if path is not None:  # Ensure path is valid before using it
-                        result_pack = self._result_pack_handler(
-                            result_pack=result_pack,
-                            content="",
-                            path=path,
-                            exception=FileReaderReadError(
-                                f"Error reading file {path}: {e.__class__.__name__} -> {e}"
-                            )
-                        )
-                    else:
-                        raise FileReaderReadError(
-                            f"Error reading files in batch: {e.__class__.__name__} -> {e}"
-                        ) from e
+            # Safely measure only, this is unlikely to happen since we handle exceptions in the level 
+            except Exception as e:
+                self.logger.error(f"Error reading files in batch: {e}")
+                # If an exception occurs, log it and set the exception in results
+                raise FileReaderReadError(
+                    f"Error reading files in batch: {e.__class__.__name__} -> {e}"
+                ) from e
                     
-        # Ensure all paths in results are valid
-        self.logger.debug(f"Read {len(result_pack)} files successfully.")
-        return result_pack
-
+        return output
+        
 
     # Generator Sync
 
@@ -1077,12 +1045,12 @@ class FileReader:
 
     def _reader_generator(
         self,
-    ) -> Dict[Path, Generator[str, None, None]]:
+    ) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Read the content of all files in the file paths as generators.
 
         Returns:
-            out (Dict[Path, Generator[str, None, None]]) : A dictionary mapping file paths to their content as generators.
+            out (Dict[Path, Generator[str, None, None] | Exception]) : A dictionary mapping file paths to their content as generators or exceptions.
         """
         if not self.file_paths:
             raise ValueError("File paths list is empty. Cannot read files.")
@@ -1091,24 +1059,32 @@ class FileReader:
             self._threadpool.submit(partial(self._read_generator_prep, path)): path for path in self.file_paths
         }
 
-        results: Dict[Path, Generator[str, None, None]] = {}
+        # Initialize dictionary to hold results
+        output: Dict[Path, Generator[str, None, None] | Exception] = {}
         for future in as_completed(futures):
             path = futures[future]
             # Get the result from the future
             try:
                 out_gen: Generator[str, None, None] = future.result()
-                if out_gen is not None:
-                    results[path] = out_gen
+                if path in output:
+                    self.logger.debug(
+                        f"File {path} already exists in output, overwriting content."
+                    )
+                output[path] = out_gen
+
             except Exception as e:
                 self.logger.error(f"Error reading files : {e}")
-                raise FileReaderReadError(f"Error reading files: {e}") from e
-        return results
+                # If an exception occurs, log it and set the exception in results
+                output[path] = FileReaderReadError(
+                    f"Error reading file: {e.__class__.__name__} -> {e}"
+                ) 
+        return output
 
 
     def _reader_batch_generator(
         self,
         path_batch: List[Path]
-    ) -> Dict[Path, Generator[str, None, None]]:
+    ) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Read the content of a batch of files as generators.
 
@@ -1116,26 +1092,32 @@ class FileReader:
             path_batch (List[Path]): The list of file paths to read from.
 
         Returns:
-            out (Dict[Path, Generator[str, None, None]]) : A dictionary mapping file paths to their content as generators.
+            out (Dict[Path, Generator[str, None, None] | Exception]) : A dictionary mapping file paths to their content as generators or exceptions.
         """
-        results: Dict[Path, Generator[str, None, None]] = {}
+        output: Dict[Path, Generator[str, None, None] | Exception] = {}
         for path in path_batch:
             try:
                 out_gen: Generator[str, None, None] = self._read_generator_prep(path)
-                if out_gen is not None:
-                    results[path] = out_gen
+                if path in output:
+                    self.logger.debug(
+                        f"File {path} already exists in output, overwriting content."
+                    )
+                output[path] = out_gen
             except Exception as e:
                 self.logger.error(f"Error reading file {path}: {e}")
-                results[path] = (line for line in [f"Error reading file : {e}"])
-        return results
+                # If an exception occurs, log it and set the exception in results
+                output[path] = FileReaderReadError(
+                    f"Error reading file {path}: {e.__class__.__name__} -> {e}"
+                )
+        return output
 
 
-    def _reader_generator_handler(self) -> Dict[Path, Generator[str, None, None]]:
+    def _reader_generator_handler(self) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Read the content of all files in the file paths in batches as generators.
 
         Returns:
-            out (Dict[Path, Generator[str, None, None]]) : A dictionary mapping file paths to their content as generators.
+            out (Dict[Path, Generator[str, None, None] | Exception]) : A dictionary mapping file paths to their content as generators or exceptions.
         """
 
         # If the number of file paths is less than 50, use the _reader_generator method.
@@ -1155,7 +1137,7 @@ class FileReader:
             )
 
         # Initialize results dictionary
-        results: Dict[Path, Generator[str, None, None]] = {}
+        output: Dict[Path, Generator[str, None, None] | Exception] = {}
 
         # Send to Pool
         futures = {
@@ -1165,7 +1147,11 @@ class FileReader:
         # Handle the results from the futures
         for future in as_completed(futures):
             try:
-                results.update(future.result())
+                # Get the result from the future
+                batch_results: Dict[Path, Generator[str, None, None] | Exception] = future.result()
+                # Update the results with the ReaderResultPack
+                output.update(batch_results)
+                
             except Exception as e:
                 self.logger.error(f"Error reading files in batch: {e}")
                 raise FileReaderReadError(
@@ -1173,42 +1159,41 @@ class FileReader:
                 ) from e
             
         # Return the results dictionary containing file paths and their content
-        self.logger.debug(f"Read {len(results)} files successfully.")
-        return results
+        self.logger.debug(f"Read {len(output)} files successfully.")
+        return output
 
 
     # Async
 
-    async def _async_read(self) -> ReaderResultPack:
+    async def _async_read(self) -> Dict[Path, str | Exception]:
         """
         Asynchronously read the content of all files in the file paths.
 
         Returns:
-            out (ReaderResultPack) : A pack of ReaderResult objects containing file paths and their content or exceptions.
+            out (Dict[Path, str | Exception) : A dictionary mapping file paths to their content or exceptions.
         """
         if not self.file_paths:
             raise ValueError("File paths list is empty. Cannot read files.")
 
         def read_all_files():
-            result_pack: ReaderResultPack = ReaderResultPack()
+            output: Dict[Path, str | Exception] = {}
             for path in self.file_paths:
                 try:
-                    out_str = self._read_file_prep(path)
-                    # Update the result pack with the ReaderResult
-                    result_pack = self._result_pack_handler(
-                        result_pack, out_str, path
-                    )
+                    out_str: str = self._read_file_prep(path)
+                    # Update the output
+                    if path in output:
+                        self.logger.warning(
+                            f"File {path} already exists in output, overwriting content."
+                        )
+                    output[path] = out_str
 
                 except Exception as e:
                     self.logger.error(f"Error reading file {path}: {e}")
-                    # Update the result pack with the exception
-                    result_pack = self._result_pack_handler(
-                        result_pack, "", path, FileReaderReadError(
-                            f"Error reading file {path}: {e.__class__.__name__} -> {e}"
-                        )
+                    # Update the output with the exception
+                    output[path] = FileReaderReadError(
+                        f"Error reading file {path}: {e.__class__.__name__} -> {e}"
                     )
-            
-            return result_pack
+            return output
 
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self._threadpool, read_all_files)
@@ -1216,7 +1201,7 @@ class FileReader:
 
     async def _async_read_batch(
         self, path_batch: List[Path]
-    ) -> ReaderResultPack:
+    ) -> Dict[Path, str | Exception]:
         """
         Asynchronously read the content of a batch of files.
 
@@ -1224,7 +1209,7 @@ class FileReader:
             path_batch (List[Path]): The list of file paths to read from.
 
         Returns:
-            out (ReaderResultPack) : A pack of ReaderResult objects containing file paths and their content or exceptions.
+            out (Dict[Path, str | Exception]) : A dictionary mapping file paths to their content or exceptions.
         """
         # Use asyncio to send file read tasks concurrently
         return await asyncio.get_event_loop().run_in_executor(
@@ -1232,18 +1217,18 @@ class FileReader:
         )
 
 
-    async def _async_reader_handler(self) -> ReaderResultPack:
+    async def _async_reader_handler(self) -> Dict[Path, str | Exception]:
         """
         Asynchronously read the content of all files in the file paths in batches.
 
         Returns:
-            out (ReaderResultPack) : A pack of ReaderResult objects containing file paths and their content or exceptions.
+            out (Dict[Path, str | Exception]) : A dictionary mapping file paths to their content or exceptions.
         """
         # If the number of file paths is less than 50, use the _async_read method.
         if len(self.file_paths) < 50:
-            result_pack: ReaderResultPack = await self._async_read()
-            self.logger.debug(f"Read {len(result_pack)} files successfully.")
-            return result_pack
+            output: Dict[Path, str | Exception] = await self._async_read()
+            self.logger.debug(f"Read {len(output)} files successfully.")
+            return output
         
         # Initialize batches of paths
         batches_of_paths: List[List[Path]] = []
@@ -1258,14 +1243,16 @@ class FileReader:
                 batcher_with_gcmanager(self.file_paths)
             )
 
-        # Init ReaderResultPack
-        result_pack: ReaderResultPack = ReaderResultPack()
+        # Init Dictionary to hold results
+        output: Dict[Path, str | Exception] = {}
 
         # Send to Pool
         for path_batch in batches_of_paths:
             try:
-                batch_results: ReaderResultPack = await self._async_read_batch(path_batch)
-                result_pack += batch_results
+                batch_results: Dict[Path, str | Exception] = await self._async_read_batch(path_batch)
+                # Update the results with the ReaderResultPack
+                output.update(batch_results)
+
             except Exception as e:
                 self.logger.error(f"Error reading files in batch: {e}")
                 raise FileReaderReadError(
@@ -1273,36 +1260,44 @@ class FileReader:
                 ) from e
             
         # Return the result pack containing file paths and their content
-        self.logger.debug(f"Read {len(result_pack)} files successfully.")
-        return result_pack
+        self.logger.debug(f"Read {len(output)} files successfully.")
+        return output
 
 
     # Async Generator
 
     async def _async_reader_generator(
         self,
-    ) -> Dict[Path, Generator[str, None, None]]:
+    ) -> Dict[Path, Generator[str, None, None] | Exception]:
 
         """
         Asynchronously read the content of all files in the file paths as generators.
 
         Returns:
-            out (Dict[Path, Generator[str, None, None]]) : A dictionary mapping file paths to their content as generators.
+            out (Dict[Path, Generator[str, None, None] | Exception]) : A dictionary mapping file paths to their content as generators or exceptions.
         """
         if not self.file_paths:
             raise ValueError("File paths list is empty. Cannot read files.")
 
         def read_all_files():
-            results = {}
+            output: Dict[Path, Generator[str, None, None] | Exception] = {}
             for path in self.file_paths:
                 try:
-                    out_gen = self._read_generator_prep(path)
-                    if out_gen is not None:
-                        results[path] = out_gen
+                    out_gen: Generator[str, None, None] = self._read_generator_prep(path)
+                    # Update the output
+                    if path in output:
+                        self.logger.warning(
+                            f"File {path} already exists in output, overwriting content."
+                        )
+                    output[path] = out_gen
+                    
                 except Exception as e:
                     self.logger.error(f"Error reading file {path}: {e}")
-                    results[path] = (line for line in [f"Error reading file: {e}"])
-            return results
+                    # If an exception occurs, log it and set the exception in results
+                    output[path] = FileReaderReadError(
+                        f"Error reading file {path}: {e.__class__.__name__} -> {e}"
+                    )
+            return output
 
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self._threadpool, read_all_files)
@@ -1311,7 +1306,7 @@ class FileReader:
     async def _async_read_batch_generator(
         self, 
         path_batch: List[Path]
-    ) -> Dict[Path, Generator[str, None, None]]:
+    ) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Asynchronously read the content of a batch of files as generators.
 
@@ -1319,7 +1314,7 @@ class FileReader:
             path_batch (List[Path]): The list of file paths to read from.
 
         Returns:
-            out (Dict[Path, Generator[str, None, None]]) : A dictionary mapping file paths to their content as generators.
+            out (Dict[Path, Generator[str, None, None] | Exception]): A dictionary mapping file paths to their content as generators or exceptions.
         """
         # Use asyncio to send file read tasks concurrently
         return await asyncio.get_event_loop().run_in_executor(
@@ -1329,12 +1324,12 @@ class FileReader:
 
     async def _async_reader_generator_handler(
         self
-    ) -> Dict[Path, Generator[str, None, None]]:
+    ) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Asynchronously read the content of all files in the file paths in batches as generators.
 
         Returns:
-            out (Dict[Path, Generator[str, None, None]]) : A dictionary mapping file paths to their content as generators.
+            out (Dict[Path, Generator[str, None, None] | Exception]): A dictionary mapping file paths to their content as generators or exceptions.
         """
 
         # If the number of file paths is less than 50, use the _async_reader_generator method.
@@ -1354,11 +1349,11 @@ class FileReader:
             )
 
         # Handle the results from the batches
-        results: Dict[Path, Generator[str, None, None]] = {}
+        output: Dict[Path, Generator[str, None, None] | Exception] = {}
         for path_batch in batches_of_paths:
             try:
-                batch_results: Dict[Path, Generator[str, None, None]] = await self._async_read_batch_generator(path_batch)
-                results.update(batch_results)
+                batch_results: Dict[Path, Generator[str, None, None] | Exception] = await self._async_read_batch_generator(path_batch)
+                output.update(batch_results)
             except Exception as e:
                 self.logger.error(f"Error reading files in batch: {e}")
                 raise FileReaderReadError(
@@ -1366,8 +1361,8 @@ class FileReader:
                 ) from e
             
         # Return the results dictionary containing file paths and their content
-        self.logger.debug(f"Read {len(results)} files successfully.")
-        return results
+        self.logger.debug(f"Read {len(output)} files successfully.")
+        return output
 
 
     # --------------
@@ -1378,6 +1373,7 @@ class FileReader:
     def clear_all(self) -> None:
         """
         Clear all file paths and the temporary sync pool.
+        Also stops the thread pool executor if it is running.
         This method is useful for resetting the FileReader state.
         """
         # Clear file paths
@@ -1395,28 +1391,12 @@ class FileReader:
 
     # Reader
 
-    def read(self) -> ReaderResultPack:
+    def read(self) -> Dict[Path, str | Exception]:
         """
         Read the content of all files in the file paths.
 
         Returns:
-            out (ReaderResultPack) : A pack of ReaderResult objects containing file paths and their content or exceptions.
-        
-        Example:
-        ```python
-        my_file_reader = FileReader(
-            file_paths=["/path/to/file1.txt", "/path/to/file2.txt"],
-        )
-        results: ReaderResultPack = my_file_reader.read()
-        # Print summary of results
-        print(results.get_summary)
-        # Or, get all successful results
-        successful_results: List[ReaderResult] = results.get_successful_results()
-        # Or, get all failed results
-        failed_results: List[ReaderResult] = results.get_failed_results()
-        # Or, get all results
-        all_results: List[ReaderResult] = results.get_all_results()
-        ```
+            out (Dict[Path, str | Exception]) : A dictionary mapping file paths to their content or exceptions.
         """
         try:
             if not self.file_paths:
@@ -1434,12 +1414,12 @@ class FileReader:
             raise FileReaderReadError(f"Error reading files: {e.__class__.__name__} -> {e}") from e
     
 
-    async def async_read(self) -> ReaderResultPack:
+    async def async_read(self) -> Dict[Path, str | Exception]:
         """
         Asynchronously read the content of all files in the file paths.
 
         Returns:
-            out (ReaderResultPack) : A pack of ReaderResult objects containing file paths and their content or exceptions.
+            out (Dict[Path, str | Exception]) : A dictionary mapping file paths to their content or exceptions.
         """
         try:
             if not self.file_paths:
@@ -1459,14 +1439,13 @@ class FileReader:
 
     # Generator Reader
 
-    def read_generator(self) -> Dict[Path, Generator[str, None, None]]:
+    def read_generator(self) -> Dict[Path, Generator[str, None, None] | Exception]:
         """ 
         Read the content of all files in the file paths as generators.
 
         Returns:
-            Dict[Path, Generator[str, None, None]]: A dictionary mapping file paths to their content as generators.
+            out (Dict[Path, Generator[str, None, None] | Exception]) : A dictionary mapping file paths to their content as generators or exceptions.
         """
-
         try:
             if not self.file_paths:
                 raise ValueError("File paths list is empty. Cannot read files.")
@@ -1483,12 +1462,12 @@ class FileReader:
             raise FileReaderReadError(f"Error reading files as generators: {e.__class__.__name__} -> {e}") from e
 
 
-    async def async_read_generator(self) -> Dict[Path, Generator[str, None, None]]:
+    async def async_read_generator(self) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Asynchronously read the content of all files in the file paths as generators.
 
         Returns:
-            Dict[Path, AsyncGenerator[str, None, None]]: A dictionary mapping file paths to their content as generators.
+            out (Dict[Path, Generator[str, None, None] | Exception]) : A dictionary mapping file paths to their content as generators or exceptions.
         """
         try:
             if not self.file_paths:
@@ -1534,7 +1513,7 @@ class FileReader:
                     )
                 else:
                     # Otherwise, read all lines from the generator
-                    results[path] = "".join(line for line in gen)
+                    results[path] = "".join(list(gen))
             except Exception as e:
                 self.logger.error(f"Error unpacking generator for file {path}: {e}")
                 results[path] = f"Error unpacking generator: {e}"
@@ -1563,6 +1542,7 @@ class FileReader:
                 raise FileReaderShutdownError(
                     f"Error shutting down thread pool executor: {e.__class__.__name__} -> {e}"
                 ) from e
+
 
     def resume_pool(self) -> None:
         """
@@ -1594,6 +1574,7 @@ class FileReader:
                 f"Error resuming thread pool executor: {e.__class__.__name__} -> {e}"
             ) from e
 
+
     def is_pool_shutdown(self) -> bool:
         """
         Check if the thread pool executor is shutdown.
@@ -1602,7 +1583,8 @@ class FileReader:
             bool: True if the thread pool executor is shutdown, False otherwise.
         """
         return self._threadpool._shutdown if hasattr(self, "_threadpool") else True
-    
+
+
     def is_pool_active(self) -> bool:
         """
         Check if the thread pool executor is active.
@@ -1779,6 +1761,7 @@ class FileReader:
             self.retry_limit = config.get("retry_limit", self.retry_limit)
             self.retry_delay = config.get("retry_delay", self.retry_delay)
             self.backoff_factor = config.get("backoff_factor", self.backoff_factor)
+            self.logger = config.get("logger", self.logger)
 
         except Exception as e:
             raise FileReaderConfigError(f"Error updating FileReader configuration: {e.__class__.__name__} -> {e}") from e

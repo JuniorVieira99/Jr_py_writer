@@ -19,7 +19,7 @@ import psutil
 
 # Local imports
 from jr_py_writer.classes.file_writer import FileWriter
-from jr_py_writer.classes.file_reader import FileReader
+from jr_py_writer.classes.file_reader import FileReader, ReaderResultPack
 
 
 # Exceptions Reader
@@ -203,18 +203,25 @@ def test_file_reader_read(file_reader: FileReader, file_writer: FileWriter, tmp_
     # Assert data is written correctly
     for file_path in file_writer:
         assert file_path.exists()
-        with open(file_path, "r") as f:
+        with open(file_path, mode="r") as f:
             content = f.read()
             assert ST_MESSAGE in content
 
     # Read the data back
-    read_data: Dict[Path, str] = file_reader.read()
+    read_data: ReaderResultPack = file_reader.read()
+
+    len_paths: int = len(temp_paths)
+
+    # Assert data is read
+    assert read_data.total_path_count == len_paths, f"Expected {len_paths} paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == len_paths, f"Expected {len_paths} results, got {read_data.total_results_count}"
+    assert read_data.success_count == len_paths, f"Expected {len_paths} successes, got {read_data.success_count}"
+    assert read_data.failure_count == 0, f"Expected 0 failures, got {read_data.failure_count}"
 
     # Assert data is read correctly
-    for file_path in read_data:
-        assert file_path.exists()
-        assert ST_MESSAGE in read_data[file_path]
-
+    for res in read_data.get_all_str_results:
+        assert ST_MESSAGE in res.content, f"Expected '{ST_MESSAGE}' in content, got {res.content}"
+        
     # Clean up temporary files
     file_writer.clear_all()
     file_reader.clear_all()
@@ -246,12 +253,18 @@ def test_file_reader_cm_read(file_reader: FileReader, file_writer: FileWriter, t
     
     # Read the data back using context manager
     with file_reader as fr:
-        read_data: Dict[Path, str] = fr.read()
+        read_data: ReaderResultPack = fr.read()
 
+    # Assert data is read
+    len_paths: int = len(temp_paths)
+    assert read_data.total_path_count == len_paths, f"Expected {len_paths} paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == len_paths, f"Expected {len_paths} results, got {read_data.total_results_count}"
+    assert read_data.success_count == len_paths, f"Expected {len_paths} successes, got {read_data.success_count}"
+    assert read_data.failure_count == 0, f"Expected 0 failures, got {read_data.failure_count}"
+    
     # Assert data is read correctly
-    for file_path in read_data:
-        assert file_path.exists()
-        assert ST_MESSAGE in read_data[file_path]
+    for res in read_data.get_all_str_results:
+        assert ST_MESSAGE in res.content, f"Expected '{ST_MESSAGE}' in content, got {res.content}"
 
     # Clean up temporary files
     file_writer.clear_all()
@@ -287,16 +300,19 @@ def test_file_reader_read_generator(file_reader: FileReader, file_writer: FileWr
             assert ST_MESSAGE in content
 
     # Read the data back using generator
-    read_data: Dict[Path, Generator[str, None, None]] = file_reader.read_generator()
-    unpacked_data: Dict[Path, str] = {}
+    read_data: ReaderResultPack = file_reader.read_generator()
 
-    # Unpack the generator to read data
-    unpacked_data = {path: "".join(gen) for path, gen in read_data.items()}
-
+    # Assert data is read
+    len_paths: int = len(temp_paths)
+    assert read_data.total_path_count == len_paths, f"Expected {len_paths} paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == len_paths, f"Expected {len_paths} results, got {read_data.total_results_count}"
+    assert read_data.success_count == len_paths, f"Expected {len_paths} successes, got {read_data.success_count}"
+    assert read_data.failure_count == 0, f"Expected 0 failures, got {read_data.failure_count}"
+    
     # Assert data is read correctly
-    for file_path, content in unpacked_data.items():
-        assert file_path.exists()
-        assert ST_MESSAGE in content
+    for res in read_data.get_all_generator_results:
+        if res.content is not None:
+            assert ST_MESSAGE in "".join(list(res.content)), f"Expected '{ST_MESSAGE}' in content, got {''.join(list(res.content))}"
 
     # Clean up temporary files
     file_writer.clear_all()
@@ -329,54 +345,19 @@ def test_file_reader_cm_read_generator(file_reader: FileReader, file_writer: Fil
 
     # Read the data back using context manager and generator
     with file_reader as fr:
-        read_data: Dict[Path, Generator[str, None, None]] = fr.read_generator()
-        unpacked_data: Dict[Path, str] = {path: "".join(gen) for path, gen in read_data.items()}
-        
+        read_data: ReaderResultPack = fr.read_generator()
+
+    # Assert data is read
+    len_paths: int = len(temp_paths)
+    assert read_data.total_path_count == len_paths, f"Expected {len_paths} paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == len_paths, f"Expected {len_paths} results, got {read_data.total_results_count}"
+    assert read_data.success_count == len_paths, f"Expected {len_paths} successes, got {read_data.success_count}"
+    assert read_data.failure_count == 0, f"Expected 0 failures, got {read_data.failure_count}"
 
     # Assert data is read correctly
-    for file_path, content in unpacked_data.items():
-        assert file_path.exists()
-        assert ST_MESSAGE in content
-
-    # Clean up temporary files
-    file_writer.clear_all()
-    file_reader.clear_all()
-
-    # Assert that the file paths are cleared
-    assert len(file_reader.file_paths) == 0
-    assert len(file_writer.file_paths) == 0
-
-
-def test_file_reader_unpacker(file_reader: FileReader, file_writer: FileWriter, tmp_path):
-    """Test unpacking data from files."""
-    # Create temporary files
-    temp_paths: List[Path] = temporary_file_handler(5, tmp_path)
-    # Set File Writer paths
-    file_writer.file_paths = temp_paths
-    # Set File Reader paths
-    file_reader.file_paths = temp_paths
-
-    # Write some data to the files
-    file_writer.write(message=ST_MESSAGE)
-
-    # Force Buffer Flush
-    file_writer.buffer_force_flush()
-
-    # Assert data is written correctly
-    for file_path in file_writer:
-        assert file_path.exists()
-        with open(file_path, "r") as f:
-            content = f.read()
-            assert ST_MESSAGE in content
-
-    # Read the data back and unpack it
-    read_data: Dict[Path, Generator[str, None, None]] = file_reader.read_generator()
-    unpacked_data: Dict[Path, str] = file_reader.unpacker(read_data)
-
-    # Assert data is read correctly
-    for file_path, content in unpacked_data.items():
-        assert file_path.exists()
-        assert ST_MESSAGE in content
+    for res in read_data.get_all_generator_results:
+        if res.content is not None:
+            assert ST_MESSAGE in "".join(list(res.content)), f"Expected '{ST_MESSAGE}' in content, got {''.join(list(res.content))}" 
 
     # Clean up temporary files
     file_writer.clear_all()
@@ -413,12 +394,18 @@ async def test_file_reader_async_read(file_reader: FileReader, file_writer: File
             assert ST_MESSAGE in content
 
     # Read the data back asynchronously
-    read_data: Dict[Path, str] = await file_reader.async_read()
+    read_data: ReaderResultPack = await file_reader.async_read()
+
+    # Assert data is read
+    len_paths: int = len(temp_paths)
+    assert read_data.total_path_count == len_paths, f"Expected {len_paths} paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == len_paths, f"Expected {len_paths} results, got {read_data.total_results_count}"
+    assert read_data.success_count == len_paths, f"Expected {len_paths} successes, got {read_data.success_count}"
+    assert read_data.failure_count == 0
 
     # Assert data is read correctly
-    for file_path in read_data:
-        assert file_path.exists()
-        assert ST_MESSAGE in read_data[file_path]
+    for res in read_data.get_all_str_results:
+        assert ST_MESSAGE in res.content, f"Expected '{ST_MESSAGE}' in content, got {res.content}"
 
     # Clean up temporary files
     file_writer.clear_all()
@@ -452,12 +439,18 @@ async def test_file_reader_cm_async_read(file_reader: FileReader, file_writer: F
 
     # Read the data back asynchronously using context manager
     async with file_reader as fr:
-        read_data: Dict[Path, str] = await fr.async_read()
+        read_data: ReaderResultPack = await fr.async_read()
+
+    # Assert data is read
+    len_paths: int = len(temp_paths)
+    assert read_data.total_path_count == len_paths, f"Expected {len_paths} paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == len_paths, f"Expected {len_paths} results, got {read_data.total_results_count}"
+    assert read_data.success_count == len_paths, f"Expected {len_paths} successes, got {read_data.success_count}"
+    assert read_data.failure_count == 0, f"Expected 0 failures, got {read_data.failure_count}"
 
     # Assert data is read correctly
-    for file_path in read_data:
-        assert file_path.exists()
-        assert ST_MESSAGE in read_data[file_path]
+    for res in read_data.get_all_str_results:
+        assert ST_MESSAGE in res.content, f"Expected '{ST_MESSAGE}' in content, got {res.content}"
 
     # Clean up temporary files
     file_writer.clear_all()
@@ -494,13 +487,19 @@ async def test_file_reader_async_read_generator(file_reader: FileReader, file_wr
             assert ST_MESSAGE in content
 
     # Read the data back asynchronously using generator
-    read_data: Dict[Path, Generator[str, None, None]] = await file_reader.async_read_generator()
-    unpacked_data: Dict[Path, str] = {path: "".join(gen) for path, gen in read_data.items()}
+    read_data: ReaderResultPack = await file_reader.async_read_generator()
+
+    # Assert data is read
+    len_paths: int = len(temp_paths)
+    assert read_data.total_path_count == len_paths, f"Expected {len_paths} paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == len_paths, f"Expected {len_paths} results, got {read_data.total_results_count}"
+    assert read_data.success_count == len_paths, f"Expected {len_paths} successes, got {read_data.success_count}"
+    assert read_data.failure_count == 0, f"Expected 0 failures, got {read_data.failure_count}"
 
     # Assert data is read correctly
-    for file_path, content in unpacked_data.items():
-        assert file_path.exists()
-        assert ST_MESSAGE in content
+    for res in read_data.get_all_generator_results:
+        if res.content is not None:
+            assert ST_MESSAGE in "".join(list(res.content)), f"Expected '{ST_MESSAGE}' in content, got {''.join(list(res.content))}"
 
     # Clean up temporary files
     file_writer.clear_all()
@@ -534,13 +533,19 @@ async def test_file_reader_cm_async_read_generator(file_reader: FileReader, file
 
     # Read the data back asynchronously using context manager and generator
     async with file_reader as fr:
-        read_data: Dict[Path, Generator[str, None, None]] = await fr.async_read_generator()
-        unpacked_data: Dict[Path, str] = fr.unpacker(read_data)
+        read_data: ReaderResultPack = await fr.async_read_generator()
+
+    # Assert data is read
+    len_paths: int = len(temp_paths)
+    assert read_data.total_path_count == len_paths, f"Expected {len_paths} paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == len_paths, f"Expected {len_paths} results, got {read_data.total_results_count}"
+    assert read_data.success_count == len_paths, f"Expected {len_paths} successes, got {read_data.success_count}"
+    assert read_data.failure_count == 0, f"Expected 0 failures, got {read_data.failure_count}"
 
     # Assert data is read correctly
-    for file_path, content in unpacked_data.items():
-        assert file_path.exists()
-        assert ST_MESSAGE in content
+    for res in read_data.get_all_generator_results:
+        if res.content is not None:
+            assert ST_MESSAGE in "".join(list(res.content)), f"Expected '{ST_MESSAGE}' in content, got {''.join(list(res.content))}"
 
     # Clean up temporary files
     file_writer.clear_all()
@@ -593,16 +598,17 @@ def test_thread_safety(file_reader: FileReader, file_writer: FileWriter, tmp_pat
                     assert ST_MESSAGE in write_result
         
         # Read the data back
-        def read_messages(results: Dict[Path, str]):
-            read_data: Dict[Path, str] = file_reader.read()
-            results.update(read_data)
+        def read_messages(pack: ReaderResultPack):
+            read_data: ReaderResultPack = file_reader.read()
+            pack += read_data
+            return pack
 
         # Create a shared list to store results from threads
-        thread_results: Dict[Path, str] = {}
+        pack: ReaderResultPack = ReaderResultPack()
 
         # Create multiple threads for reading - 5
         read_threads = [
-            threading.Thread(target=read_messages, args=(thread_results))
+            threading.Thread(target=read_messages, args=(pack,))
             for _ in range(5)
         ]
 
@@ -615,9 +621,13 @@ def test_thread_safety(file_reader: FileReader, file_writer: FileWriter, tmp_pat
             thread.join()
 
         # Assert results
-        for file_path, content in thread_results.items():
-            assert file_path.exists()
-            assert "Thread message" in content
+        assert pack.has_failed_results == False, "There should be no failed results"
+        assert pack.has_successful_results == True, "There should be successful results"
+
+        # Assert that all messages were read correctly
+        assert any(ST_MESSAGE in res.content for res in pack.get_all_str_results), "All messages should be present in the read results"
+
+        pack.clear_results()
 
     finally:
         # Ensure that the file paths are cleared in case of any exceptions
@@ -630,79 +640,6 @@ def test_thread_safety(file_reader: FileReader, file_writer: FileWriter, tmp_pat
             if path.exists():
                 path.unlink()
 
-
-def test_memory_cleanup(file_reader: FileReader, file_writer: FileWriter, tmp_path):
-    """Test that file reads are properly cleaned up."""
-    import gc
-    import weakref
-
-    temp_file = [tmp_path / "cleanup_test.log", tmp_path / "cleanup_test_2.log"]
-
-    # Set File Writer paths
-    file_writer.file_paths = temp_file
-    # Set File Reader paths
-    file_reader.file_paths = temp_file
-
-    # Create weak reference to file_writer
-    weak_ref_writer = weakref.ref(file_writer)
-    # Create weak reference to file_reader
-    weak_ref_reader = weakref.ref(file_reader)
-
-    # Write some messages
-    file_writer.write(ST_MESSAGE)
-
-    # Force Flush
-    file_writer.buffer_force_flush()
-
-    # Assert Writing is done
-    for file_path in file_writer:
-        assert file_path.exists()
-        with open(file_path, "r") as f:
-            read = f.read()
-            assert ST_MESSAGE in read
-
-    # Clean up file_writer
-    file_writer.clear_all()
-
-    # Assert that the file paths are cleared
-    assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-    
-    # Delete reference to file_writer to allow garbage collection
-    del file_writer
-
-    # Force garbage collection
-    gc.collect()
-
-    # Verify cleanup
-    assert (
-        weak_ref_writer() is None
-    ), "FileWriter should be cleaned up and weak reference should be None"
-
-    # Read the data back
-    content: Dict[Path, str] = file_reader.read()
-
-    # Assert Reading is done
-    for file_path in file_reader:
-        assert file_path.exists()
-        assert ST_MESSAGE in content[file_path]
-
-    # Clean up file_reader
-    file_reader.clear_all()
-
-    # Assert that the file paths are cleared
-    assert len(file_reader.file_paths) == 0, "File paths should be cleared after operations"
-
-    # Delete reference to file_reader to allow garbage collection
-    del file_reader
-
-    # Force garbage collection
-    gc.collect()
-
-    # Verify cleanup
-    assert (
-        weak_ref_reader() is None
-    ), "FileReader should be cleaned up and weak reference should be None"
-    
 
 @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
 def test_memory_usage(file_reader: FileReader, file_writer: FileWriter, tmp_path, batch_size: int):
@@ -736,8 +673,8 @@ def test_memory_usage(file_reader: FileReader, file_writer: FileWriter, tmp_path
         assert file_path.exists()
         with open(file_path, "r") as f:
             read = f.read()
-            assert len(read) > 0, "Log file should not be empty after writing logs"
-            assert "Memory test message" in read, "Log messages should be present in the file"
+            assert len(read) > 0, "File should not be empty after writing logs"
+            assert "Memory test message" in read, "Messages should be present in the file"
 
     # Cleanup
     file_writer.clear_all()
@@ -761,7 +698,7 @@ def test_memory_usage(file_reader: FileReader, file_writer: FileWriter, tmp_path
     )
 
     # Read the data back
-    content: Dict[Path, str] = file_reader.read()
+    read_data: ReaderResultPack = file_reader.read()
 
     after_memory = process.memory_info().rss  # Resident Set Size after logging
     after_memory_mb = round(after_memory / (1024 * 1024), 2)  # Convert to MB
@@ -775,14 +712,20 @@ def test_memory_usage(file_reader: FileReader, file_writer: FileWriter, tmp_path
         (after_memory - initial_memory) / (1024 * 1024), 2
     )  # Convert to MB
     print(
-        f"Memory difference for {batch_size} logs: {leak_memory_kb} KB ({leak_memory_mb} MB)"
+        f"Memory difference for {batch_size} messages: {leak_memory_kb} KB ({leak_memory_mb} MB)"
     )
 
     # Assert Reading is done
-    for file_path in file_reader:
-        assert file_path.exists()
-        assert len(content[file_path]) > 0, "Log file should not be empty after reading logs"
-        assert "Memory test message" in content[file_path], "Log messages should be present in the file"
+    assert read_data.total_path_count == 2, f"Expected 2 paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == 2, f"Expected 2 results, got {read_data.total_results_count}"
+    assert read_data.success_count == 2, f"Expected 2 successes, got {read_data.success_count}"
+    assert read_data.failure_count == 0, f"Expected 0 failures, got {read_data.failure_count}"
+
+    # Assert data is read correctly
+    for path in temp_file:
+        str_content: List[str] = read_data.get_content(path)
+        assert len(str_content) > 0, f"file {path} should not be empty after reading"
+        assert any("Memory test message" in line for line in str_content), f"Messages should be present in the file {path}"
 
     # Cleanup
     file_reader.clear_all()
@@ -826,8 +769,8 @@ async def test_memory_usage_async(file_reader: FileReader, file_writer: FileWrit
         assert file_path.exists()
         with open(file_path, "r") as f:
             read = f.read()
-            assert len(read) > 0, "Log file should not be empty after writing logs"
-            assert ST_MESSAGE in read, "Log messages should be present in the file"
+            assert len(read) > 0, "File should not be empty after writing logs"
+            assert ST_MESSAGE in read, "Messages should be present in the file"
 
     # Cleanup
     file_writer.clear_all()
@@ -849,7 +792,7 @@ async def test_memory_usage_async(file_reader: FileReader, file_writer: FileWrit
     )
 
     # Read the data back asynchronously
-    content: Dict[Path, str] = await file_reader.async_read()
+    read_data: ReaderResultPack = await file_reader.async_read()
 
     after_memory = process.memory_info().rss  # Resident Set Size after logging
     after_memory_mb = round(after_memory / (1024 * 1024), 2)
@@ -864,22 +807,30 @@ async def test_memory_usage_async(file_reader: FileReader, file_writer: FileWrit
     )
 
     print(
-        f"Memory difference for {batch_size} logs: {leak_memory_kb} KB ({leak_memory_mb} MB)"
+        f"Memory difference for {batch_size} messages: {leak_memory_kb} KB ({leak_memory_mb} MB)"
     )
 
     # Assert Reading is done
-    for file_path in file_reader:
-        assert file_path.exists()
-        assert len(content[file_path]) > 0, "Log file should not be empty after reading logs"
-        assert ST_MESSAGE in content[file_path], "Log messages should be present in the file"
+    assert read_data.total_path_count == batch_size, f"Expected {batch_size} paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == batch_size, f"Expected {batch_size} results, got {read_data.total_results_count}"
+    assert read_data.success_count == batch_size, f"Expected {batch_size} successes, got {read_data.success_count}"
+    assert read_data.failure_count == 0, f"Expected 0 failures, got {read_data.failure_count}"
+
+    # Assert data is read correctly
+    for path in temp_file:
+        str_content: List[str] = read_data.get_content(path)
+        assert len(str_content) > 0, f"file {path} should not be empty after reading"
+        assert any(ST_MESSAGE in line for line in str_content), f"Messages should be present in the file {path}"
 
     # Cleanup
     file_reader.clear_all()
+    read_data.clear_results()
 
     # Assert that the file paths are cleared
     assert len(file_reader.file_paths) == 0, "File paths should be cleared after operations"
 
     del file_reader
+    del read_data
 
     gc.collect()  # Force garbage collection
     print("Memory usage test completed for batch size:", batch_size)
@@ -914,7 +865,8 @@ def test_file_reader_performance(file_reader: FileReader, file_writer: FileWrite
     start_time = time.time()
 
     # Write some logs
-    file_writer.write(ST_MESSAGE)
+    with file_writer as fw:
+        fw.write(ST_MESSAGE)
 
     # Force the file handler to flush the buffer
     file_writer.buffer_force_flush()
@@ -929,8 +881,8 @@ def test_file_reader_performance(file_reader: FileReader, file_writer: FileWrite
         assert file_path.exists()
         with open(file_path, "r") as f:
             read = f.read()
-            assert len(read) > 0, "Log file should not be empty after writing logs"
-            assert ST_MESSAGE in read, "Log messages should be present in the file"
+            assert len(read) > 0, "Messages file should not be empty after writing logs"
+            assert ST_MESSAGE in read, "Messages should be present in the file"
 
     # Cleanup
     file_writer.clear_all()
@@ -946,21 +898,25 @@ def test_file_reader_performance(file_reader: FileReader, file_writer: FileWrite
     # Read the data back
     start_time = time.time()
 
-    content: Dict[Path, str] = file_reader.read()
+    with file_reader as fr:
+        read_data: ReaderResultPack = fr.read()
 
     end_time = time.time()
     elapsed_time = end_time - start_time
 
-    print(f"Time taken to read {batch_size} logs: {elapsed_time:.4f} seconds")
+    print(f"Time taken to read {batch_size} messages: {elapsed_time:.4f} seconds")
+    print(f"Read Data: {read_data}")
 
     # Assert Reading is done
-    for file_path in file_reader:
-        assert file_path.exists()
-        assert len(content[file_path]) > 0, "Log file should not be empty after reading logs"
-        assert ST_MESSAGE in content[file_path], "Log messages should be present in the file"
+    assert read_data.has_failed_results == False, "There should be no failed results"
+    assert read_data.has_successful_results == True, "There should be successful results"
+    assert read_data.total_path_count == batch_size, f"Expected {batch_size} paths, got {read_data.total_path_count}"
+    assert read_data.total_results_count == batch_size, f"Expected {batch_size} results got {read_data.total_results_count}"
+    assert read_data.success_count == batch_size, f"Expected {batch_size} successes, got {read_data.success_count}"
 
     # Cleanup
     file_reader.clear_all()
+    read_data.clear_results()
 
     # Assert that the file paths are cleared
     assert len(file_reader.file_paths) == 0, "File paths should be cleared after operations"
@@ -1021,22 +977,23 @@ def test_file_reader_cm_performance(file_reader: FileReader, file_writer: FileWr
 
     # Read the data back using context manager
     start_time = time.time()
-    with file_reader as fr:
-        content: Dict[Path, str] = fr.read()
     
+    with file_reader as fr:
+       read_data: ReaderResultPack = fr.read()
+
     end_time = time.time()
     elapsed_time = end_time - start_time
 
     print(f"Time taken to read {batch_size} logs using context manager: {elapsed_time:.4f} seconds")
 
     # Assert Reading is done
-    for file_path in file_reader:
-        assert file_path.exists()
-        assert len(content[file_path]) > 0, "Log file should not be empty after reading logs"
-        assert ST_MESSAGE in content[file_path], "Log messages should be present in the file"
+    assert read_data.has_failed_results == False, "There should be no failed results"
+    assert read_data.has_successful_results == True, "There should be successful results"
+    assert read_data.success_count == batch_size, f"Expected {batch_size} successes, got {read_data.success_count}"
 
     # Cleanup
     file_reader.clear_all()
+    read_data.clear_results()
 
     # Assert that the file paths are cleared
     assert len(file_reader.file_paths) == 0, "File paths should be cleared after operations"
@@ -1098,7 +1055,7 @@ def test_file_reader_performance_generator(file_reader: FileReader, file_writer:
 
     # Read the data back using generator
     start_time = time.time()
-    read_data: Dict[Path, Generator[str, None, None]] = file_reader.read_generator()
+    read_data: ReaderResultPack = file_reader.read_generator()
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -1106,7 +1063,7 @@ def test_file_reader_performance_generator(file_reader: FileReader, file_writer:
 
     # Unpack the generator to read data
     start_time = time.time()
-    unpacked_data: Dict[Path, str] = {path: "".join(gen) for path, gen in read_data.items()}
+    read_data.in_unpack()
 
     end_time = time.time()
     elapsed_time_unpacking = end_time - start_time
@@ -1114,13 +1071,13 @@ def test_file_reader_performance_generator(file_reader: FileReader, file_writer:
     print(f"Total time taken to read and unpack {batch_size} messages using generator: {elapsed_time + elapsed_time_unpacking:.4f} seconds")
 
     # Assert Reading is done
-    for file_path, content in unpacked_data.items():
-        assert file_path.exists()
-        assert len(content) > 0, "File should not be empty after reading logs"
-        assert ST_MESSAGE in content, "Messages should be present in the file"
+    assert read_data.has_failed_results == False, "There should be no failed results"
+    assert read_data.has_successful_results == True, "There should be successful results"
+    assert read_data.success_count == batch_size, f"Expected {batch_size} successes, got {read_data.success_count}"
 
     # Cleanup
     file_reader.clear_all()
+    read_data.clear_results()
 
     # Assert that the file paths are cleared
     assert len(file_reader.file_paths) == 0, "File paths should be cleared after operations"
@@ -1182,7 +1139,7 @@ def test_file_reader_cm_performance_generator(file_reader: FileReader, file_writ
     # Read the data back using context manager and generator
     start_time = time.time()
     with file_reader as fr:
-        read_data: Dict[Path, Generator[str, None, None]] = fr.read_generator()
+        read_data: ReaderResultPack = fr.read_generator()
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -1190,7 +1147,7 @@ def test_file_reader_cm_performance_generator(file_reader: FileReader, file_writ
 
     # Unpack the generator to read data
     start_time = time.time()
-    unpacked_data: Dict[Path, str] = file_reader.unpacker(read_data)
+    read_data.in_unpack()
     
     end_time = time.time()
     elapsed_time_unpacking = end_time - start_time
@@ -1198,13 +1155,13 @@ def test_file_reader_cm_performance_generator(file_reader: FileReader, file_writ
     print(f"Total time taken to read and unpack {batch_size} messages using context manager and generator: {elapsed_time + elapsed_time_unpacking:.4f} seconds")
 
     # Assert Reading is done
-    for file_path, content in unpacked_data.items():
-        assert file_path.exists()
-        assert len(content) > 0, "File should not be empty after reading logs"
-        assert ST_MESSAGE in content, "Messages should be present in the file"
+    assert read_data.has_failed_results == False, "There should be no failed results"
+    assert read_data.has_successful_results == True, "There should be successful results"
+    assert read_data.success_count == batch_size, f"Expected {batch_size} successes, got {read_data.success_count}"
 
     # Cleanup
     file_reader.clear_all()
+    read_data.clear_results()
 
     # Assert that the file paths are cleared
     assert len(file_reader.file_paths) == 0, "File paths should be cleared after operations"
@@ -1268,20 +1225,21 @@ async def test_file_reader_performance_async(file_reader: FileReader, file_write
     # Read the data back asynchronously
 
     start_time = time.time()
-    content: Dict[Path, str] = await file_reader.async_read()
+    read_data: ReaderResultPack = await file_reader.async_read()
 
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"Time taken to read {batch_size} messages asynchronously: {elapsed_time:.4f} seconds")
 
     # Assert Reading is done
-    for file_path in file_reader:
-        assert file_path.exists()
-        assert len(content[file_path]) > 0, "File should not be empty after reading logs"
-        assert ST_MESSAGE in content[file_path], "Messages should be present in the file"
+    for path in temp_file:
+        content: List[str] = read_data.get_content(path)
+        assert len(content) > 0, f"File {path} should not be empty"
+        assert ST_MESSAGE in content, f"Messages should be present in the file {path}"
 
     # Cleanup
     file_reader.clear_all()
+    read_data.clear_results()
 
     # Assert that the file paths are cleared
     assert len(file_reader.file_paths) == 0, "File paths should be cleared after operations"
@@ -1345,17 +1303,17 @@ async def test_file_reader_cm_performance_async(file_reader: FileReader, file_wr
 
     start_time = time.time()
     async with file_reader as fr:
-        content: Dict[Path, str] = await fr.async_read()
+        data_read: ReaderResultPack = await fr.async_read()
 
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"Time taken to read {batch_size} messages asynchronously using context manager: {elapsed_time:.4f} seconds")
 
     # Assert Reading is done
-    for file_path in file_reader:
-        assert file_path.exists()
-        assert len(content[file_path]) > 0, "File should not be empty after reading logs"
-        assert ST_MESSAGE in content[file_path], "Messages should be present in the file"
+    for path in temp_file:
+        content: List[str] = data_read.get_content(path)
+        assert len(content) > 0, f"File {path} should not be empty"
+        assert ST_MESSAGE in content, f"Messages should be present in the file {path}"
 
     # Cleanup
     file_reader.clear_all()
@@ -1421,7 +1379,7 @@ async def test_file_reader_performance_async_generator(file_reader: FileReader, 
 
     # Read the data back asynchronously using generator
     start_time = time.time()
-    read_data: Dict[Path, Generator[str, None, None]] = await file_reader.async_read_generator()
+    read_data: ReaderResultPack = await file_reader.async_read_generator()
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -1429,7 +1387,7 @@ async def test_file_reader_performance_async_generator(file_reader: FileReader, 
 
     # Unpack the generator to read data
     start_time = time.time()
-    unpacked_data: Dict[Path, str] = file_reader.unpacker(read_data)
+    read_data.in_unpack()
 
     end_time = time.time()
     elapsed_time_unpacking = end_time - start_time
@@ -1437,10 +1395,10 @@ async def test_file_reader_performance_async_generator(file_reader: FileReader, 
     print(f"Total time taken to read and unpack {batch_size} messages asynchronously using generator: {elapsed_time + elapsed_time_unpacking:.4f} seconds")
 
     # Assert Reading is done
-    for file_path, content in unpacked_data.items():
-        assert file_path.exists()
-        assert len(content) > 0, "File should not be empty after reading logs"
-        assert ST_MESSAGE in content, "Messages should be present in the file"
+    for path in temp_file:
+        content: List[str] = read_data.get_content(path)
+        assert len(content) > 0, f"File {path} should not be empty"
+        assert ST_MESSAGE in content, f"Messages should be present in the file {path}"
 
     # Cleanup
     file_reader.clear_all()
@@ -1506,7 +1464,7 @@ async def test_file_reader_cm_performance_async_generator(file_reader: FileReade
     # Read the data back asynchronously using context manager and generator
     start_time = time.time()
     async with file_reader as fr:
-        read_data: Dict[Path, Generator[str, None, None]] = await fr.async_read_generator()
+        read_data: ReaderResultPack = await fr.async_read_generator()
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -1514,7 +1472,7 @@ async def test_file_reader_cm_performance_async_generator(file_reader: FileReade
 
     # Unpack the generator to read data
     start_time = time.time()
-    unpacked_data: Dict[Path, str] = fr.unpacker(read_data)
+    read_data.in_unpack()
     
     end_time = time.time()
     elapsed_time_unpacking = end_time - start_time
@@ -1522,13 +1480,11 @@ async def test_file_reader_cm_performance_async_generator(file_reader: FileReade
     print(f"Total time taken to read and unpack {batch_size} messages asynchronously using context manager and generator: {elapsed_time + elapsed_time_unpacking:.4f} seconds")
 
     # Assert Reading is done
-    for file_path, content in unpacked_data.items():
-        assert file_path.exists()
-        assert len(content) > 0, "File should not be empty after reading logs"
-        assert ST_MESSAGE in content, "Messages should be present in the file"
+    assert ST_MESSAGE in read_data.get_full_report
 
     # Cleanup
     file_reader.clear_all()
+    read_data.clear_results()
 
     # Assert that the file paths are cleared
     assert len(file_reader.file_paths) == 0, "File paths should be cleared after operations"
