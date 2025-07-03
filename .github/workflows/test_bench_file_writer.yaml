@@ -1,4 +1,4 @@
-name: tests_overall_file_writer
+name: tests_bench_file_writer
 
 on:
   workflow_dispatch:
@@ -58,7 +58,7 @@ jobs:
 
       - name: Run sync overall tests
         run: |
-          uv run pytest test/bench_tests/test_bench_file_writer.py --bench --benchmark-autosave
+          uv run pytest test/bench_tests/test_bench_file_writer.py
 
       - name: Post job cleanup
         if: always()

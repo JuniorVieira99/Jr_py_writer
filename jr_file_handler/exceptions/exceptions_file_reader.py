@@ -52,12 +52,10 @@ class FileReaderAsyncReadError(FileReaderException):
     pass
 
 
-
 class FileReaderConfigError(FileReaderException):
     """Raised when there is an error with the file reader configuration."""
 
     pass
-
 
 
 class FileReaderShutdownError(FileReaderException):

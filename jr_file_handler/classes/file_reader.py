@@ -11,7 +11,7 @@ import asyncio
 import time
 import json
 
-from typing import Generator, Iterator, List, Union, Dict, Final, Any
+from typing import Generator, Iterator, List, Sequence, Union, Dict, Final, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
@@ -33,7 +33,7 @@ from jr_file_handler.exceptions.exceptions_file_reader import (
     FileReaderSyncPoolCleanupError,
     FileReaderShutdownError,
     FileReaderResumeError,
-    FileReaderConfigError
+    FileReaderConfigError,
 )
 
 
@@ -41,20 +41,21 @@ from jr_file_handler.exceptions.exceptions_file_reader import (
 # Classes
 # ----------------------------------------------------------------------------------------------
 
-LIST_NECESSARY_KEYS: Final[List[str]] = [
+LIST_OF_NECESSARY_KEYS: Final[List[str]] = [
     "file_paths",
     "retry_limit",
     "retry_delay",
     "backoff_factor",
-    "logger"
+    "logger",
 ]
+
 
 class FileReader:
     """
     FileReader Class
     ================
     The `FileReader` class is designed to handle file reading operations with support for synchronous, asynchronous, and generator-based approaches.
-    It provides robust error handling, retry mechanisms, and thread-safe operations for reading files. 
+    It provides robust error handling, retry mechanisms, and thread-safe operations for reading files.
     This class is particularly useful for managing multiple file paths and reading their contents efficiently.
 
     Attention:
@@ -66,7 +67,7 @@ class FileReader:
     # Synchronous reading
     with FileReader(file_paths=["file1.txt", "file2.txt"]) as fr:
         content = fr.read()
-    
+
     # Asynchronous reading
     async with FileReader(file_paths=["file1.txt", "file2.txt"]) as fr
         content = await fr.async_read()
@@ -103,7 +104,7 @@ class FileReader:
             The factor by which the retry delay increases after each retry.
         logger (logging.Logger):
             The logger instance used for logging errors and warnings.
-    
+
     Example:
         ```python
         # Initialize FileReader with file paths
@@ -113,7 +114,7 @@ class FileReader:
             retry_delay=0.5,
             backoff_factor=0.1
         )
-        
+
         # Read files synchronously
         with my_file_reader as fr:
             result_pack: ReaderResultPack = fr.read()
@@ -152,7 +153,7 @@ class FileReader:
 
         # Get failed results
         failed_results = result_pack.get_failed_results
-        
+
         # Shutdown thread pool
         reader.force_shutdown()
 
@@ -177,7 +178,6 @@ class FileReader:
         "_logger",
     )
 
-
     # --------------
     # Attributes
 
@@ -191,7 +191,6 @@ class FileReader:
     _threadpool: ThreadPoolExecutor
     _logger: logging.Logger
 
-
     # --------------
     # Properties
 
@@ -200,6 +199,9 @@ class FileReader:
         """
         Returns the list of file paths for logging.
         """
+        if not hasattr(self, "_file_paths"):
+            self._file_paths = []
+            self.logger.warning("File paths not set. Returning empty list.")
         return self._file_paths
 
     @property
@@ -239,7 +241,6 @@ class FileReader:
             self._logger = logging.getLogger(__name__)
         return self._logger
 
-
     # --------------
     # Setters
 
@@ -252,11 +253,15 @@ class FileReader:
             paths (List[Path]) : A list of file paths.
         """
         try:
+            if paths is None:
+                self._file_paths = []
+
             if not isinstance(paths, list):
                 paths = [paths]  # Convert single path to list
 
             if not paths:
-                raise ValueError("File paths list cannot be empty")
+                self._file_paths = []
+                return
 
             for i in range(len(paths)):
                 if isinstance(paths[i], str):
@@ -386,13 +391,12 @@ class FileReader:
                 f"Invalid logger: {e.__class__.__name__} -> {e}"
             ) from e
 
-
     # --------------
     # Constructor
 
     def __init__(
         self,
-        file_paths: List[Union[Path, str]],
+        file_paths: Union[List[Union[Path, str]], None] = None,
         write_mode: LogWriteMode = LogWriteMode.READ,
         retry_limit: int = 2,
         retry_delay: float = 0.1,
@@ -403,7 +407,7 @@ class FileReader:
         Initialize the FileReader with file paths, log level, and log format.
 
         Arguments:
-            file_paths (List[Union[Path, str]]):
+            file_paths (List[Union[Path, str]] | None):
                 A list of file paths for logging.
             write_mode (LogWriteMode):
                 The write mode for file logging.
@@ -422,15 +426,23 @@ class FileReader:
                     - If None, a default logger will be created.
         """
         try:
+            # Validate file_paths
             out_list = []
-            for path in file_paths:
-                if isinstance(path, str):
-                    path = Path(path)
-                elif not isinstance(path, Path):
-                    raise ValueError(
-                        f"Invalid file path: {path}. Must be a Path or str."
+            if file_paths is None or len(file_paths) == 0:
+                self._file_paths = out_list
+            else:
+                if not isinstance(file_paths, list):
+                    raise TypeError(
+                        f"Expected file_paths to be a list, got {type(file_paths).__name__}"
                     )
-                out_list.append(path)
+                for path in file_paths:
+                    if isinstance(path, str):
+                        path = Path(path)
+                    elif not isinstance(path, Path):
+                        raise ValueError(
+                            f"Invalid file path: {path}. Must be a Path or str."
+                        )
+                    out_list.append(path)
 
             if logger is not None:
                 self.logger = logger
@@ -463,7 +475,6 @@ class FileReader:
                 f"Error initializing FileReader: {e.__class__.__name__} -> {e}"
             ) from e
 
-
     # --------------
     # Magic Methods
 
@@ -480,7 +491,6 @@ class FileReader:
             f"retry_limit={self.retry_limit}, "
             f"retry_delay={self.retry_delay})"
         )
-
 
     def __eq__(self, other: object) -> bool:
         """
@@ -501,7 +511,6 @@ class FileReader:
             and self.retry_delay == other.retry_delay
         )
 
-
     def __ne__(self, other: object) -> bool:
         """
         Checks if two FileReader instances are not equal.
@@ -514,7 +523,6 @@ class FileReader:
         """
         return not self.__eq__(other)
 
-
     def __len__(self) -> int:
         """
         Returns the number of file paths in the FileReader.
@@ -523,7 +531,6 @@ class FileReader:
             int: The number of file paths.
         """
         return len(self.file_paths)
-
 
     def __iter__(self) -> Iterator[Path]:
         """
@@ -535,7 +542,6 @@ class FileReader:
         if self.file_paths is None:
             raise ValueError("File paths list is empty. Cannot iterate.")
         return iter(self.file_paths)
-
 
     def __del__(self):
         """Cleanup resources when object is destroyed."""
@@ -555,7 +561,6 @@ class FileReader:
         except Exception:
             pass
 
-
     def __contains__(self, item: Path) -> bool:
         """
         Checks if a file path is in the FileReader.
@@ -570,13 +575,11 @@ class FileReader:
             raise ValueError(f"Item must be a Path object, got {type(item).__name__}")
         return item in self.file_paths
 
-
     def __enter__(self):
         """
         Context manager enter method for FileReader.
         """
         return self
-
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
@@ -599,13 +602,11 @@ class FileReader:
         if exc_type is not None:
             return False
 
-
     async def __aenter__(self):
         """
         Asynchronous context manager enter method for FileReader.
         """
         return self
-
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """
@@ -625,7 +626,6 @@ class FileReader:
         if exc_type is not None:
             return False
 
-
     # --------------
     # Pool Handlers
 
@@ -638,7 +638,7 @@ class FileReader:
             # Check if the pool exists
             if not hasattr(self, "_temp_sync_pool"):
                 return
-            
+
             # Check if the sync pool is empty
             if not self._temp_sync_pool:
                 return
@@ -666,11 +666,9 @@ class FileReader:
             raise FileReaderSyncPoolCleanupError(
                 f"Error clearing sync pool: {e.__class__.__name__} -> {e}"
             ) from e
-        
 
     # --------------
     # File Reading Methods
-
 
     # Sync
 
@@ -688,7 +686,6 @@ class FileReader:
         with self._lock:  # Ensure thread-safe access to the file
             file_str: str = file.read()
             return file_str
-
 
     def _read_file_retries(self, file: TextIOWrapper, path: Path) -> str:
         """
@@ -734,7 +731,6 @@ class FileReader:
                         time.sleep(self.retry_delay)
         return ""
 
-
     def _read_batch(self, path_batch: List[Path]) -> Dict[Path, str | Exception]:
         """
         Read the content of a batch of files.
@@ -756,16 +752,15 @@ class FileReader:
                     )
                 with self._lock:
                     output[path] = out_str
-                
+
             except Exception as e:
                 self.logger.error(f"Error reading file {path}: {e}")
                 # If an exception occurs, log it and set the exception in results
                 with self._lock:
                     output[path] = FileReaderReadError(
-                            f"Error reading file {path}: {e.__class__.__name__} -> {e}"
-                        )
+                        f"Error reading file {path}: {e.__class__.__name__} -> {e}"
+                    )
         return output
-
 
     def _read_file_prep(self, path: Path) -> str:
         """
@@ -784,12 +779,10 @@ class FileReader:
                 raise FileExistsError(f"File {path} does not exist.")
 
             file: TextIOWrapper | None = self._temp_sync_pool.get(path, None)
-            
+
             # If file not in pool, then lazy initialize it
             if not file:
-                self.logger.warning(
-                    f"File {path} is not in the temporary sync pool."
-                )
+                self.logger.warning(f"File {path} is not in the temporary sync pool.")
                 self.logger.debug(f"Opening file {path} for reading...")
                 with self._lock:
                     file = open(path, self.write_mode.value, encoding="utf-8")
@@ -806,17 +799,14 @@ class FileReader:
             if not file.readable():
                 self.logger.error(f"File {path} is not readable.")
                 raise IOError(f"File {path} is not readable.")
-            
+
             return self._read_file_retries(file, path)
 
         except Exception as e:
             self.logger.error(f"Error reading file {path}: {e}")
             raise
 
-
-    def _reader(
-        self
-    ) -> Dict[Path, str | Exception]:
+    def _reader(self) -> Dict[Path, str | Exception]:
         """
         Read the content of all files in the file paths.
 
@@ -825,12 +815,13 @@ class FileReader:
         """
         # Send to ThreadPool
         futures = {
-            self._threadpool.submit(partial(self._read_file_prep, path)): path for path in self.file_paths
+            self._threadpool.submit(partial(self._read_file_prep, path)): path
+            for path in self.file_paths
         }
 
         # Initialize Dict
         output: Dict[Path, str | Exception] = {}
-        
+
         # Handle Results from the futures
         for future in as_completed(futures):
             path = futures[future]
@@ -840,18 +831,19 @@ class FileReader:
                 out_str: str = future.result()
                 # Update the results dictionary
                 output[path] = out_str
-                
+
             # If an exception occurs, log it and set the exception in results
             except Exception as e:
-                self.logger.error(f"Error reading files : {e.__class__.__name__} -> {e}")
+                self.logger.error(
+                    f"Error reading files : {e.__class__.__name__} -> {e}"
+                )
                 # Update the dictionary with the exception
                 output[path] = FileReaderReadError(
-                        f"Error reading file: {e.__class__.__name__} -> {e}"
-                    )           
+                    f"Error reading file: {e.__class__.__name__} -> {e}"
+                )
         return output
 
-
-    def _reader_handler(self) ->  Dict[Path, str | Exception]:
+    def _reader_handler(self) -> Dict[Path, str | Exception]:
         """
         Read the content of all files in the file paths in batches.
 
@@ -861,18 +853,16 @@ class FileReader:
         # If the number of file paths is less than 50, use the _reader method.
         if len(self.file_paths) < 50:
             out_dict: Dict[Path, str | Exception] = self._reader()
-            self.logger.debug(
-                f"Read {len(out_dict)} files successfully."
-            )
+            self.logger.debug(f"Read {len(out_dict)} files successfully.")
             return out_dict
-        
+
         # Initialize batches of paths
         batches_of_paths: List[List[Path]] = []
 
         # If the number of file paths is greater than 50, use the batcher function.
         if len(self.file_paths) > 50 and len(self.file_paths) <= 1000:
             batches_of_paths: List[List[Path]] = list(batcher(self.file_paths))
-        
+
         # If the number of file paths is greater than 1000, use the batcher_with_gcmanager function.
         elif len(self.file_paths) > 1000:
             batches_of_paths: List[List[Path]] = list(
@@ -896,23 +886,20 @@ class FileReader:
                 # Update the dictionary
                 output.update(out_result)
 
-            # Safely measure only, this is unlikely to happen since we handle exceptions in the level 
+            # Safely measure only, this is unlikely to happen since we handle exceptions in the level
             except Exception as e:
                 self.logger.error(f"Error reading files in batch: {e}")
                 # If an exception occurs, log it and set the exception in results
                 raise FileReaderReadError(
                     f"Error reading files in batch: {e.__class__.__name__} -> {e}"
                 ) from e
-                    
+
         return output
-        
 
     # Generator Sync
 
     def _read_generator(
-        self,
-        file: TextIOWrapper,
-        path: Path
+        self, file: TextIOWrapper, path: Path
     ) -> Generator[str, None, None]:
         """
         Generator to read the content of a file line by line.
@@ -932,11 +919,8 @@ class FileReader:
             self.logger.error(f"Error reading file {path}: {e}")
             raise FileReaderReadError(f"Error reading file {path}: {e}") from e
 
-
     def _read_generator_retries(
-        self,
-        file: TextIOWrapper,
-        path: Path
+        self, file: TextIOWrapper, path: Path
     ) -> Generator[str, None, None]:
         """
         Generator to read the content of a file line by line with retry logic.
@@ -944,7 +928,7 @@ class FileReader:
         Arguments:
             file (TextIOWrapper): The file object to read from.
             path (Path): The file path for logging.
-        
+
         Yields:
             out (str) : The content of the file line by line.
         """
@@ -985,19 +969,15 @@ class FileReader:
                         )
                         time.sleep(self.retry_delay)
 
-
-    def _read_generator_prep(
-        self,
-        path: Path
-    ) -> Generator[str, None, None]:
+    def _read_generator_prep(self, path: Path) -> Generator[str, None, None]:
         """
         Prepare the generator for reading the content of a file.
 
         Arguments:
             path (Path): The file path to read from.
-        
+
         Returns:
-            out (Generator[str, None, None]) : A generator yielding the content of the file            
+            out (Generator[str, None, None]) : A generator yielding the content of the file
 
         """
 
@@ -1010,18 +990,16 @@ class FileReader:
 
             # Get the file from the temporary sync pool
             file: TextIOWrapper | None = self._temp_sync_pool.get(path)
-            
+
             # If file not in pool, then lazy initialize it
             if not file:
-                    self.logger.warning(
-                        f"File {path} is not in the temporary sync pool."
-                    )
-                    with self._lock:
-                        self.logger.info(f"Opening file {path} for reading...")
-                        file = open(path, self.write_mode.value, encoding="utf-8")
+                self.logger.warning(f"File {path} is not in the temporary sync pool.")
+                with self._lock:
+                    self.logger.info(f"Opening file {path} for reading...")
+                    file = open(path, self.write_mode.value, encoding="utf-8")
 
-                        # Send to sync pool
-                        self._temp_sync_pool[path] = file
+                    # Send to sync pool
+                    self._temp_sync_pool[path] = file
 
             # Check if the file is closed or not readable
             # Unlike to happen, but just in case
@@ -1035,7 +1013,7 @@ class FileReader:
                 self.logger.error(f"File {path} is not readable.")
                 yield "File is not readable."
                 return
-            
+
             for line in self._read_generator_retries(file, path):
                 yield line
             return
@@ -1043,7 +1021,6 @@ class FileReader:
         except Exception as e:
             self.logger.error(f"Error reading file {path}: {e}")
             raise FileReaderReadError(f"Error reading file {path}: {e}") from e
-
 
     def _reader_generator(
         self,
@@ -1058,7 +1035,8 @@ class FileReader:
             raise ValueError("File paths list is empty. Cannot read files.")
 
         futures = {
-            self._threadpool.submit(partial(self._read_generator_prep, path)): path for path in self.file_paths
+            self._threadpool.submit(partial(self._read_generator_prep, path)): path
+            for path in self.file_paths
         }
 
         # Initialize dictionary to hold results
@@ -1079,13 +1057,11 @@ class FileReader:
                 # If an exception occurs, log it and set the exception in results
                 output[path] = FileReaderReadError(
                     f"Error reading file: {e.__class__.__name__} -> {e}"
-                ) 
+                )
         return output
 
-
     def _reader_batch_generator(
-        self,
-        path_batch: List[Path]
+        self, path_batch: List[Path]
     ) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Read the content of a batch of files as generators.
@@ -1113,8 +1089,9 @@ class FileReader:
                 )
         return output
 
-
-    def _reader_generator_handler(self) -> Dict[Path, Generator[str, None, None] | Exception]:
+    def _reader_generator_handler(
+        self,
+    ) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Read the content of all files in the file paths in batches as generators.
 
@@ -1143,27 +1120,30 @@ class FileReader:
 
         # Send to Pool
         futures = {
-            self._threadpool.submit(partial(self._reader_batch_generator, path_batch)): path_batch
+            self._threadpool.submit(
+                partial(self._reader_batch_generator, path_batch)
+            ): path_batch
             for path_batch in batches_of_paths
         }
         # Handle the results from the futures
         for future in as_completed(futures):
             try:
                 # Get the result from the future
-                batch_results: Dict[Path, Generator[str, None, None] | Exception] = future.result()
+                batch_results: Dict[Path, Generator[str, None, None] | Exception] = (
+                    future.result()
+                )
                 # Update the results with the ReaderResultPack
                 output.update(batch_results)
-                
+
             except Exception as e:
                 self.logger.error(f"Error reading files in batch: {e}")
                 raise FileReaderReadError(
                     f"Error reading files in batch: {e.__class__.__name__} -> {e}"
                 ) from e
-            
+
         # Return the results dictionary containing file paths and their content
         self.logger.debug(f"Read {len(output)} files successfully.")
         return output
-
 
     # Async
 
@@ -1200,7 +1180,6 @@ class FileReader:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self._threadpool, read_all_files)
 
-
     async def _async_read_batch(
         self, path_batch: List[Path]
     ) -> Dict[Path, str | Exception]:
@@ -1218,7 +1197,6 @@ class FileReader:
             self._threadpool, partial(self._read_batch, path_batch)
         )
 
-
     async def _async_reader_handler(self) -> Dict[Path, str | Exception]:
         """
         Asynchronously read the content of all files in the file paths in batches.
@@ -1231,7 +1209,7 @@ class FileReader:
             output: Dict[Path, str | Exception] = await self._async_read()
             self.logger.debug(f"Read {len(output)} files successfully.")
             return output
-        
+
         # Initialize batches of paths
         batches_of_paths: List[List[Path]] = []
 
@@ -1251,7 +1229,9 @@ class FileReader:
         # Send to Pool
         for path_batch in batches_of_paths:
             try:
-                batch_results: Dict[Path, str | Exception] = await self._async_read_batch(path_batch)
+                batch_results: Dict[Path, str | Exception] = (
+                    await self._async_read_batch(path_batch)
+                )
                 # Update the results with the ReaderResultPack
                 output.update(batch_results)
 
@@ -1260,18 +1240,16 @@ class FileReader:
                 raise FileReaderReadError(
                     f"Error reading files in batch: {e.__class__.__name__} -> {e}"
                 ) from e
-            
+
         # Return the result pack containing file paths and their content
         self.logger.debug(f"Read {len(output)} files successfully.")
         return output
-
 
     # Async Generator
 
     async def _async_reader_generator(
         self,
     ) -> Dict[Path, Generator[str, None, None] | Exception]:
-
         """
         Asynchronously read the content of all files in the file paths as generators.
 
@@ -1285,14 +1263,16 @@ class FileReader:
             output: Dict[Path, Generator[str, None, None] | Exception] = {}
             for path in self.file_paths:
                 try:
-                    out_gen: Generator[str, None, None] = self._read_generator_prep(path)
+                    out_gen: Generator[str, None, None] = self._read_generator_prep(
+                        path
+                    )
                     # Update the output
                     if path in output:
                         self.logger.warning(
                             f"File {path} already exists in output, overwriting content."
                         )
                     output[path] = out_gen
-                    
+
                 except Exception as e:
                     self.logger.error(f"Error reading file {path}: {e}")
                     # If an exception occurs, log it and set the exception in results
@@ -1304,10 +1284,8 @@ class FileReader:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self._threadpool, read_all_files)
 
-
     async def _async_read_batch_generator(
-        self, 
-        path_batch: List[Path]
+        self, path_batch: List[Path]
     ) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Asynchronously read the content of a batch of files as generators.
@@ -1322,10 +1300,9 @@ class FileReader:
         return await asyncio.get_event_loop().run_in_executor(
             self._threadpool, partial(self._reader_batch_generator, path_batch)
         )
-    
 
     async def _async_reader_generator_handler(
-        self
+        self,
     ) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Asynchronously read the content of all files in the file paths in batches as generators.
@@ -1337,7 +1314,7 @@ class FileReader:
         # If the number of file paths is less than 50, use the _async_reader_generator method.
         if len(self.file_paths) < 50:
             return await self._async_reader_generator()
-        
+
         # Initialize batches of paths
         batches_of_paths: List[List[Path]] = []
 
@@ -1354,18 +1331,19 @@ class FileReader:
         output: Dict[Path, Generator[str, None, None] | Exception] = {}
         for path_batch in batches_of_paths:
             try:
-                batch_results: Dict[Path, Generator[str, None, None] | Exception] = await self._async_read_batch_generator(path_batch)
+                batch_results: Dict[Path, Generator[str, None, None] | Exception] = (
+                    await self._async_read_batch_generator(path_batch)
+                )
                 output.update(batch_results)
             except Exception as e:
                 self.logger.error(f"Error reading files in batch: {e}")
                 raise FileReaderReadError(
                     f"Error reading files in batch: {e.__class__.__name__} -> {e}"
                 ) from e
-            
+
         # Return the results dictionary containing file paths and their content
         self.logger.debug(f"Read {len(output)} files successfully.")
         return output
-
 
     # --------------
     # Methods
@@ -1390,7 +1368,6 @@ class FileReader:
             if not self._threadpool._shutdown:
                 self._threadpool.shutdown(wait=True)
 
-
     # Reader
 
     def read(self) -> Dict[Path, str | Exception]:
@@ -1403,18 +1380,23 @@ class FileReader:
         try:
             if not self.file_paths:
                 raise ValueError("File paths list is empty. Cannot read files.")
-            
-            if self.write_mode not in (LogWriteMode.READ, LogWriteMode.READ_WRITE):
+
+            if self.write_mode not in (
+                LogWriteMode.READ,
+                LogWriteMode.READ_WRITE,
+                LogWriteMode.WRITE_READ,
+            ):
                 raise ValueError(
                     f"FileReader is not configured for reading. Use LogWriteMode.READ or LogWriteMode.READ_WRITE."
                     f"\n\tCurrent mode: {self.write_mode.value}\n"
                 )
-            
+
             return self._reader_handler()
         except Exception as e:
             self.logger.error(f"Error reading files: {e.__class__.__name__} -> {e}")
-            raise FileReaderReadError(f"Error reading files: {e.__class__.__name__} -> {e}") from e
-    
+            raise FileReaderReadError(
+                f"Error reading files: {e.__class__.__name__} -> {e}"
+            ) from e
 
     async def async_read(self) -> Dict[Path, str | Exception]:
         """
@@ -1426,8 +1408,12 @@ class FileReader:
         try:
             if not self.file_paths:
                 raise ValueError("File paths list is empty. Cannot read files.")
-            
-            if self.write_mode not in (LogWriteMode.READ, LogWriteMode.READ_WRITE):
+
+            if self.write_mode not in (
+                LogWriteMode.READ,
+                LogWriteMode.READ_WRITE,
+                LogWriteMode.WRITE_READ,
+            ):
                 raise ValueError(
                     f"FileReader is not configured for reading. Use LogWriteMode.READ or LogWriteMode.READ_WRITE."
                     f"\n\tCurrent mode: {self.write_mode.value}\n"
@@ -1435,14 +1421,17 @@ class FileReader:
 
             return await self._async_reader_handler()
         except Exception as e:
-            self.logger.error(f"Error reading files asynchronously: {e.__class__.__name__} -> {e}")
-            raise FileReaderAsyncReadError(f"Error reading files asynchronously: {e.__class__.__name__} -> {e}") from e
-
+            self.logger.error(
+                f"Error reading files asynchronously: {e.__class__.__name__} -> {e}"
+            )
+            raise FileReaderAsyncReadError(
+                f"Error reading files asynchronously: {e.__class__.__name__} -> {e}"
+            ) from e
 
     # Generator Reader
 
     def read_generator(self) -> Dict[Path, Generator[str, None, None] | Exception]:
-        """ 
+        """
         Read the content of all files in the file paths as generators.
 
         Returns:
@@ -1451,8 +1440,12 @@ class FileReader:
         try:
             if not self.file_paths:
                 raise ValueError("File paths list is empty. Cannot read files.")
-            
-            if self.write_mode not in (LogWriteMode.READ, LogWriteMode.READ_WRITE):
+
+            if self.write_mode not in (
+                LogWriteMode.READ,
+                LogWriteMode.READ_WRITE,
+                LogWriteMode.WRITE_READ,
+            ):
                 raise ValueError(
                     f"FileReader is not configured for reading. Use LogWriteMode.READ or LogWriteMode.READ_WRITE."
                     f"\n\tCurrent mode: {self.write_mode.value}\n"
@@ -1460,11 +1453,16 @@ class FileReader:
 
             return self._reader_generator_handler()
         except Exception as e:
-            self.logger.error(f"Error reading files as generators: {e.__class__.__name__} -> {e}")
-            raise FileReaderReadError(f"Error reading files as generators: {e.__class__.__name__} -> {e}") from e
+            self.logger.error(
+                f"Error reading files as generators: {e.__class__.__name__} -> {e}"
+            )
+            raise FileReaderReadError(
+                f"Error reading files as generators: {e.__class__.__name__} -> {e}"
+            ) from e
 
-
-    async def async_read_generator(self) -> Dict[Path, Generator[str, None, None] | Exception]:
+    async def async_read_generator(
+        self,
+    ) -> Dict[Path, Generator[str, None, None] | Exception]:
         """
         Asynchronously read the content of all files in the file paths as generators.
 
@@ -1474,8 +1472,12 @@ class FileReader:
         try:
             if not self.file_paths:
                 raise ValueError("File paths list is empty. Cannot read files.")
-            
-            if self.write_mode not in (LogWriteMode.READ, LogWriteMode.READ_WRITE):
+
+            if self.write_mode not in (
+                LogWriteMode.READ,
+                LogWriteMode.READ_WRITE,
+                LogWriteMode.WRITE_READ,
+            ):
                 raise ValueError(
                     f"FileReader is not configured for reading. Use LogWriteMode.READ or LogWriteMode.READ_WRITE."
                     f"\n\tCurrent mode: {self.write_mode.value}\n"
@@ -1483,18 +1485,20 @@ class FileReader:
 
             return await self._async_reader_generator_handler()
         except Exception as e:
-            self.logger.error(f"Error reading files asynchronously as generators: {e.__class__.__name__} -> {e}")
-            raise FileReaderAsyncReadError(f"Error reading files asynchronously as generators: {e.__class__.__name__} -> {e}") from e
-
+            self.logger.error(
+                f"Error reading files asynchronously as generators: {e.__class__.__name__} -> {e}"
+            )
+            raise FileReaderAsyncReadError(
+                f"Error reading files asynchronously as generators: {e.__class__.__name__} -> {e}"
+            ) from e
 
     # Generator Unpacker
 
     def unpacker(
         self,
         dict_gen: Dict[Path, Generator[str, None, None] | Exception],
-        chunk: int | None = None
+        chunk: int | None = None,
     ) -> Dict[Path, str | Exception]:
-        
         """
         Unpack the content of generators in a dictionary.
 
@@ -1510,7 +1514,7 @@ class FileReader:
             raise TypeError("Input must be a dictionary of generators.")
         if not dict_gen:
             raise ValueError("Input dictionary is empty. Cannot unpack generators.")
-        
+
         if not isinstance(chunk, (int, type(None))):
             raise TypeError("Chunk size must be an integer or None.")
 
@@ -1526,24 +1530,21 @@ class FileReader:
                 raise TypeError(
                     f"Value for {path} must be a Generator or Exception, got {type(gen)}."
                 )
-            
+
             if isinstance(gen, Exception):
                 self.logger.error(f"Generator for file {path} is an exception: {gen}")
                 results[path] = gen
             else:
                 if chunk:
                     # Read a limited number of lines from the generator
-                    results[path] = ''.join(
+                    results[path] = "".join(
                         [next(gen) for _ in range(chunk) if gen is not None]
                     )
                 else:
                     # Read all lines from the generator
-                    results[path] = ''.join(
-                        [line for line in gen if line is not None]
-                    )
+                    results[path] = "".join([line for line in gen if line is not None])
 
         return results
-    
 
     # Thread Pool Management
 
@@ -1567,7 +1568,6 @@ class FileReader:
                 raise FileReaderShutdownError(
                     f"Error shutting down thread pool executor: {e.__class__.__name__} -> {e}"
                 ) from e
-
 
     def resume_pool(self) -> None:
         """
@@ -1599,7 +1599,6 @@ class FileReader:
                 f"Error resuming thread pool executor: {e.__class__.__name__} -> {e}"
             ) from e
 
-
     def is_pool_shutdown(self) -> bool:
         """
         Check if the thread pool executor is shutdown.
@@ -1608,7 +1607,6 @@ class FileReader:
             bool: True if the thread pool executor is shutdown, False otherwise.
         """
         return self._threadpool._shutdown if hasattr(self, "_threadpool") else True
-
 
     def is_pool_active(self) -> bool:
         """
@@ -1619,15 +1617,10 @@ class FileReader:
         """
         return not self._threadpool._shutdown if hasattr(self, "_threadpool") else False
 
-
     # Class Methods
 
     @classmethod
-    def from_dict(
-        cls,
-        config_dict: Dict[str, Any]
-    ) -> 'FileReader':
-
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "FileReader":
         """
         Create a FileReader instance from a configuration dictionary.
 
@@ -1641,15 +1634,22 @@ class FileReader:
 
             if not isinstance(config_dict, dict):
                 raise TypeError("Configuration must be a dictionary.")
-            
+
             if len(config_dict) == 0:
                 raise ValueError("Configuration dictionary is empty.")
-            
-            file_paths: List[Path | str] = config_dict.get("file_paths", [])
+
+            for key in config_dict:
+                if key not in LIST_OF_NECESSARY_KEYS:
+                    raise KeyError(
+                        f"Invalid key '{key}' in configuration. "
+                        f"Allowed keys are: {', '.join(LIST_OF_NECESSARY_KEYS)}"
+                    )
+
+            file_paths: Sequence[Path | str] = config_dict.get("file_paths", [])
 
             if not file_paths:
                 raise TypeError("No file paths provided in the configuration.")
-            
+
             write_mode: LogWriteMode = LogWriteMode(config_dict.get("write_mode", "r"))
 
             retry_limit: int = config_dict.get("retry_limit", 3)
@@ -1658,24 +1658,25 @@ class FileReader:
             logger: logging.Logger | None = config_dict.get("logger", None)
 
             return cls(
-                file_paths=file_paths,
+                file_paths=[
+                    Path(fp) if isinstance(fp, str) else fp for fp in file_paths
+                ],
                 write_mode=write_mode,
                 retry_limit=retry_limit,
                 retry_delay=retry_delay,
                 backoff_factor=backoff_factor,
-                logger=logger
-            )              
-            
+                logger=logger,
+            )
+
         except Exception as e:
-            raise FileReaderConfigError(f"Error creating FileReader from config: {e.__class__.__name__} -> {e}") from e
-        
+            raise FileReaderConfigError(
+                f"Error creating FileReader from config: {e.__class__.__name__} -> {e}"
+            ) from e
 
     @classmethod
     def from_json(
-        cls,
-        json_file: Union[str, bytes],
-        custom_decoder: str = 'utf-8'
-    ) -> 'FileReader':
+        cls, json_file: Union[str, bytes], custom_decoder: str = "utf-8"
+    ) -> "FileReader":
         """
         Create a FileReader instance from a JSON file.
 
@@ -1683,7 +1684,7 @@ class FileReader:
             json_file (Union[str, bytes]): The path to the JSON file or the JSON content as a string.
             custom_decoder (str): The encoding to use for decoding the JSON file content.
                 - Default is 'utf-8'.
-        
+
         Returns:
             out (FileReader): An instance of FileReader configured with the provided settings.
         """
@@ -1694,30 +1695,37 @@ class FileReader:
                 raise TypeError("json_file must be a string or bytes.")
 
             if not isinstance(custom_decoder, str):
-                raise TypeError("custom_decoder must be a string representing the encoding.")
-            
-            if custom_decoder not in ['utf-8', 'utf-16', 'latin-1']:
-                raise ValueError("custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'.")
+                raise TypeError(
+                    "custom_decoder must be a string representing the encoding."
+                )
 
-            json_str: str = json_file if isinstance(json_file, str) else json_file.decode(custom_decoder)
-            
+            if custom_decoder not in ["utf-8", "utf-16", "latin-1"]:
+                raise ValueError(
+                    "custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'."
+                )
+
+            json_str: str = (
+                json_file
+                if isinstance(json_file, str)
+                else json_file.decode(custom_decoder)
+            )
+
             if not json_str:
                 raise ValueError("JSON file content is empty.")
-            
+
             json_dict: Dict[str, Any] = json.loads(json_str)
 
             return cls.from_dict(json_dict)
-        
-        except Exception as e:
-            raise FileReaderConfigError(f"Error creating FileReader from JSON: {e.__class__.__name__} -> {e}") from e
 
+        except Exception as e:
+            raise FileReaderConfigError(
+                f"Error creating FileReader from JSON: {e.__class__.__name__} -> {e}"
+            ) from e
 
     @classmethod
     def from_yaml(
-        cls,
-        yaml_file: Union[str, bytes],
-        custom_decoder: str = 'utf-8'
-    ) -> 'FileReader':
+        cls, yaml_file: Union[str, bytes], custom_decoder: str = "utf-8"
+    ) -> "FileReader":
         """
         Create a FileReader instance from a YAML file.
 
@@ -1734,33 +1742,125 @@ class FileReader:
 
             if not isinstance(yaml_file, (str, bytes)):
                 raise TypeError("yaml_file must be a string or bytes.")
-            
-            if not isinstance(custom_decoder, str):
-                raise TypeError("custom_decoder must be a string representing the encoding.")
-            
-            if custom_decoder not in ['utf-8', 'utf-16', 'latin-1']:
-                raise ValueError("custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'.")
 
-            yaml_str: str = yaml_file if isinstance(yaml_file, str) else yaml_file.decode(custom_decoder)
-            
+            if not isinstance(custom_decoder, str):
+                raise TypeError(
+                    "custom_decoder must be a string representing the encoding."
+                )
+
+            if custom_decoder not in ["utf-8", "utf-16", "latin-1"]:
+                raise ValueError(
+                    "custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'."
+                )
+
+            yaml_str: str = (
+                yaml_file
+                if isinstance(yaml_file, str)
+                else yaml_file.decode(custom_decoder)
+            )
+
             if not yaml_str:
                 raise ValueError("YAML file content is empty.")
-            
+
             yaml_dict: Dict[str, Any] = yaml.safe_load(yaml_str)
 
             return cls.from_dict(yaml_dict)
-        
-        except Exception as e:
-            raise FileReaderConfigError(f"Error creating FileReader from YAML: {e.__class__.__name__} -> {e}") from e
 
+        except Exception as e:
+            raise FileReaderConfigError(
+                f"Error creating FileReader from YAML: {e.__class__.__name__} -> {e}"
+            ) from e
 
     # Config
+
+    def config(
+        self,
+        file_paths: Union[List[Union[Path, str]], None] = None,
+        write_mode: LogWriteMode = LogWriteMode.READ,
+        retry_limit: int = 3,
+        retry_delay: float = 1.0,
+        backoff_factor: float = 0.2,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        """
+        Update the FileReader configuration.
+
+        Arguments:
+            file_paths (Union[List[Union[Path, str]], None]):
+                - The list of file paths to read from.
+                - Default is `None`, which means no file paths are set.
+            write_mode (LogWriteMode):
+                - The mode in which the files will be opened.
+                - Default is `LogWriteMode.READ`.
+            retry_limit (int):
+                - The maximum number of retries for reading files.
+                - Default is `3`.
+            retry_delay (float):
+                - The delay in seconds between retries.
+                - Default is `1.0` seconds.
+            backoff_factor (float):
+                - The factor by which the retry delay increases after each retry.
+                - Default is `0.2`.
+            logger (logging.Logger | None):
+                - The logger to use for logging messages.
+                - Default is `None`, which uses the root logger.
+        Raises:
+            FileReaderConfigError: If there is an error updating the configuration.
+        """
+        try:
+            # Shutdown the thread pool if it is active
+            if self.is_pool_active():
+                self.force_shutdown(wait=True)
+
+            # Validate file_paths
+            out_list = []
+            if file_paths is None or len(file_paths) == 0:
+                self._file_paths = out_list
+            else:
+                if not isinstance(file_paths, list):
+                    raise TypeError(
+                        f"Expected file_paths to be a list, got {type(file_paths).__name__}"
+                    )
+                for path in file_paths:
+                    if isinstance(path, str):
+                        path = Path(path)
+                    elif not isinstance(path, Path):
+                        raise ValueError(
+                            f"Invalid file path: {path}. Must be a Path or str."
+                        )
+                    out_list.append(path)
+
+            self.file_paths = out_list
+            self.write_mode = write_mode
+            self.retry_limit = retry_limit
+            self.retry_delay = retry_delay
+            self.backoff_factor = backoff_factor
+            self.logger = logger if logger else logging.getLogger(__name__)
+
+            # Reinitialize the thread pool executor
+            # Unlikely to happen, but just in case
+            if not hasattr(self, "_threadpool"):
+                # Init Threadpool
+                max_workers: int = min(len(out_list), 4) if len(out_list) > 1 else 1
+                if os.name == "nt":
+                    max_workers: int = min(max_workers, 4)  # Windows file handle limits
+                else:
+                    max_workers: int = min(max_workers, os.cpu_count() or 4)
+
+                self._threadpool: ThreadPoolExecutor = ThreadPoolExecutor(
+                    max_workers=max_workers
+                )
+            else:
+                self.resume_pool()
+        except Exception as e:
+            raise FileReaderConfigError(
+                f"Error updating FileReader configuration: {e.__class__.__name__} -> {e}"
+            ) from e
 
     def config_from_dict(
         self,
         config: Dict[str, Any],
     ) -> None:
-
         """
         Update the FileReader configuration from a dictionary.
 
@@ -1770,32 +1870,33 @@ class FileReader:
         try:
             if not isinstance(config, dict):
                 raise TypeError("Configuration must be a dictionary.")
-            
+
             if len(config) == 0:
                 raise ValueError("Configuration dictionary is empty.")
-            
-            for key in config.keys():
-                if key not in LIST_NECESSARY_KEYS:
-                    raise KeyError(
-                        f"Invalid key '{key}' in configuration. "
-                        f"Allowed keys are: {', '.join(LIST_NECESSARY_KEYS)}"
+
+            for key in config:
+                if key not in LIST_OF_NECESSARY_KEYS:
+                    raise ValueError(
+                        f"Invalid configuration key: {key}. "
+                        f"Allowed keys are: {', '.join(LIST_OF_NECESSARY_KEYS)}"
                     )
-            
-            self.file_paths = config.get("file_paths", self.file_paths)
-            self.write_mode = LogWriteMode(config.get("write_mode", self.write_mode.value))
-            self.retry_limit = config.get("retry_limit", self.retry_limit)
-            self.retry_delay = config.get("retry_delay", self.retry_delay)
-            self.backoff_factor = config.get("backoff_factor", self.backoff_factor)
-            self.logger = config.get("logger", self.logger)
+
+            self.config(
+                file_paths=config.get("file_paths", []),
+                write_mode=LogWriteMode(config.get("write_mode", "r")),
+                retry_limit=config.get("retry_limit", 3),
+                retry_delay=config.get("retry_delay", 1.0),
+                backoff_factor=config.get("backoff_factor", 0.2),
+                logger=config.get("logger", None),
+            )
 
         except Exception as e:
-            raise FileReaderConfigError(f"Error updating FileReader configuration: {e.__class__.__name__} -> {e}") from e
-        
-    
+            raise FileReaderConfigError(
+                f"Error updating FileReader configuration: {e}"
+            ) from e
+
     def config_from_json(
-        self,
-        json_file: Union[str, bytes],
-        custom_decoder: str = 'utf-8'
+        self, json_file: Union[str, bytes], custom_decoder: str = "utf-8"
     ) -> None:
         """
         Update the FileReader configuration from a JSON file.
@@ -1808,14 +1909,22 @@ class FileReader:
         try:
             if not isinstance(json_file, (str, bytes)):
                 raise TypeError("json_file must be a string or bytes.")
-            
-            if not isinstance(custom_decoder, str):
-                raise TypeError("custom_decoder must be a string representing the encoding.")
-            
-            if custom_decoder not in ['utf-8', 'utf-16', 'latin-1']:
-                raise ValueError("custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'.")
 
-            json_str: str = json_file if isinstance(json_file, str) else json_file.decode(custom_decoder)
+            if not isinstance(custom_decoder, str):
+                raise TypeError(
+                    "custom_decoder must be a string representing the encoding."
+                )
+
+            if custom_decoder not in ["utf-8", "utf-16", "latin-1"]:
+                raise ValueError(
+                    "custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'."
+                )
+
+            json_str: str = (
+                json_file
+                if isinstance(json_file, str)
+                else json_file.decode(custom_decoder)
+            )
 
             if not json_str:
                 raise ValueError("JSON file content is empty.")
@@ -1823,13 +1932,12 @@ class FileReader:
             config_dict: Dict[str, Any] = json.loads(json_str)
             self.config_from_dict(config_dict)
         except Exception as e:
-            raise FileReaderConfigError(f"Error updating FileReader configuration from JSON: {e.__class__.__name__} -> {e}") from e
-
+            raise FileReaderConfigError(
+                f"Error updating FileReader configuration from JSON: {e.__class__.__name__} -> {e}"
+            ) from e
 
     def config_from_yaml(
-        self,
-        yaml_file: Union[str, bytes],
-        custom_decoder: str = 'utf-8'
+        self, yaml_file: Union[str, bytes], custom_decoder: str = "utf-8"
     ) -> None:
         """
         Update the FileReader configuration from a YAML file.
@@ -1842,14 +1950,22 @@ class FileReader:
         try:
             if not isinstance(yaml_file, (str, bytes)):
                 raise TypeError("yaml_file must be a string or bytes.")
-            
-            if not isinstance(custom_decoder, str):
-                raise TypeError("custom_decoder must be a string representing the encoding.")
-            
-            if custom_decoder not in ['utf-8', 'utf-16', 'latin-1']:
-                raise ValueError("custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'.")
 
-            yaml_str: str = yaml_file if isinstance(yaml_file, str) else yaml_file.decode(custom_decoder)
+            if not isinstance(custom_decoder, str):
+                raise TypeError(
+                    "custom_decoder must be a string representing the encoding."
+                )
+
+            if custom_decoder not in ["utf-8", "utf-16", "latin-1"]:
+                raise ValueError(
+                    "custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'."
+                )
+
+            yaml_str: str = (
+                yaml_file
+                if isinstance(yaml_file, str)
+                else yaml_file.decode(custom_decoder)
+            )
 
             if not yaml_str:
                 raise ValueError("YAML file content is empty.")
@@ -1857,6 +1973,31 @@ class FileReader:
             config_dict: Dict[str, Any] = yaml.safe_load(yaml_str)
             self.config_from_dict(config_dict)
         except Exception as e:
-            raise FileReaderConfigError(f"Error updating FileReader configuration from YAML: {e.__class__.__name__} -> {e}") from e
-        
-    
+            raise FileReaderConfigError(
+                f"Error updating FileReader configuration from YAML: {e.__class__.__name__} -> {e}"
+            ) from e
+
+    # Reset
+
+    def reset_to_default(self) -> None:
+        """
+        Reset the FileReader instance to its default configuration.
+        This method clears the file paths and reinitializes the thread pool executor.
+        """
+        try:
+            # Clear all file paths
+            self.clear_all()
+
+            # Reset to default configuration
+            self.config(
+                file_paths=[],
+                write_mode=LogWriteMode.READ,
+                retry_limit=3,
+                retry_delay=1.0,
+                backoff_factor=0.2,
+                logger=logging.getLogger(__name__),
+            )
+        except Exception as e:
+            raise FileReaderConfigError(
+                f"Error resetting FileReader to default: {e.__class__.__name__} -> {e}"
+            ) from e

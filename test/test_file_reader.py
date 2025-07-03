@@ -37,7 +37,7 @@ from jr_file_handler.exceptions.exceptions_file_reader import (
 def file_writer(tmp_path) -> Generator[FileWriter, None, None]:
     """Fixture for creating a FileReader instance."""
     temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
-    
+
     file_writer = FileWriter(
         file_paths=temp_files,  # Use temp files
         retry_limit=0,
@@ -94,10 +94,8 @@ EDGE_FLOAT = [-1.0, "1.0", [], {}, (), set(), None, b"byte"]
 
 EDGE_PATHS = [
     (),
-    [],
     {},
     set(),
-    None,
     b"byte",
     55,
     1.0,
@@ -114,7 +112,8 @@ ST_MESSAGE: Final[str] = "This is a test message for the file reader and writer.
 # ----------------------------------------------------------------------------------------------
 # EDGE Tests
 # ----------------------------------------------------------------------------------------------
- 
+
+
 class TestFileReaderEdgeCases:
     """
     Test edge cases for FileReader.
@@ -130,15 +129,18 @@ class TestFileReaderEdgeCases:
     - **test_file_reader_edge_setters:**
         - Test edge cases for FileReader setters with invalid values.
     """
+
     @pytest.mark.parametrize("edge_value", EDGE_PATHS)
     def test_file_reader_edge_constructor_paths(self, edge_value):
         """Test edge cases for FileReader constructor."""
         # Test with invalid file_paths
         with pytest.raises(FileReaderConstructionError):
             FileReader(
-                file_paths=edge_value, retry_limit=0, retry_delay=0.0, backoff_factor=0.0
+                file_paths=edge_value,
+                retry_limit=0,
+                retry_delay=0.0,
+                backoff_factor=0.0,
             )
-
 
     @pytest.mark.parametrize("edge_value", EDGE_INT)
     def test_file_reader_edge_constructor_int(self, tmp_path, edge_value):
@@ -147,7 +149,6 @@ class TestFileReaderEdgeCases:
         # Test with invalid retry_limit
         with pytest.raises(FileReaderConstructionError):
             FileReader(temp_files, retry_limit=edge_value)
-
 
     @pytest.mark.parametrize("edge_value", EDGE_FLOAT)
     def test_file_reader_edge_constructor_float(self, tmp_path, edge_value):
@@ -161,7 +162,6 @@ class TestFileReaderEdgeCases:
         # Test with invalid backoff_factor
         with pytest.raises(FileReaderConstructionError):
             FileReader(temp_files, backoff_factor=edge_value)
-
 
     def test_file_reader_edge_setters(self, file_reader: FileReader):
         """Test edge cases for FileReader."""
@@ -197,6 +197,7 @@ class TestFileReaderInitialization:
     - **test_file_reader_init:**
         - Test the initialization of FileReader with default parameters.
     """
+
     def test_file_reader_init(self, file_reader: FileReader):
         """Test the initialization of FileWriter."""
         assert len(file_reader.file_paths) == 2
@@ -223,7 +224,9 @@ class TestFileReaderSync:
         - Test reading from files using generator with context manager.
     """
 
-    def test_file_reader_read(self, file_reader: FileReader, file_writer: FileWriter, tmp_path):
+    def test_file_reader_read(
+        self, file_reader: FileReader, file_writer: FileWriter, tmp_path
+    ):
         """Test reading from files."""
         # Create temporary files
         temp_paths: List[Path] = temporary_file_handler(5, tmp_path)
@@ -251,12 +254,16 @@ class TestFileReaderSync:
         len_paths: int = len(temp_paths)
 
         # Assert data is read
-        assert len(read_data) == len_paths, f"Expected {len_paths} paths, got {len(read_data)}"
+        assert (
+            len(read_data) == len_paths
+        ), f"Expected {len_paths} paths, got {len(read_data)}"
         for file_path, content in read_data.items():
             if isinstance(content, Exception):
                 pytest.fail(f"Error reading file {file_path}: {content}")
-            assert ST_MESSAGE in content, f"Expected '{ST_MESSAGE}' in content, got {content}"
-            
+            assert (
+                ST_MESSAGE in content
+            ), f"Expected '{ST_MESSAGE}' in content, got {content}"
+
         # Clean up temporary files
         file_writer.clear_all()
         file_reader.clear_all()
@@ -265,8 +272,9 @@ class TestFileReaderSync:
         assert len(file_reader.file_paths) == 0
         assert len(file_writer.file_paths) == 0
 
-
-    def test_file_reader_cm_read(self, file_reader: FileReader, file_writer: FileWriter, tmp_path):
+    def test_file_reader_cm_read(
+        self, file_reader: FileReader, file_writer: FileWriter, tmp_path
+    ):
         """Test reading from files with context manager."""
         # Create temporary files
         temp_paths: List[Path] = temporary_file_handler(5, tmp_path)
@@ -278,26 +286,30 @@ class TestFileReaderSync:
         with file_writer as fw:
             # Write some data to the files
             fw.write(message=ST_MESSAGE)
-        
+
         # Assert data is written correctly
         for file_path in file_writer:
             assert file_path.exists()
             with open(file_path, "r") as f:
                 content = f.read()
                 assert ST_MESSAGE in content
-        
+
         # Read the data back using context manager
         with file_reader as fr:
             read_data: Dict[Path, str | Exception] = fr.read()
 
         # Assert data is read
         len_paths: int = len(temp_paths)
-        assert len(read_data) == len_paths, f"Expected {len_paths} paths, got {len(read_data)}"
+        assert (
+            len(read_data) == len_paths
+        ), f"Expected {len_paths} paths, got {len(read_data)}"
         for file_path, content in read_data.items():
             if isinstance(content, Exception):
                 pytest.fail(f"Error reading file {file_path}: {content}")
-            assert ST_MESSAGE in content, f"Expected '{ST_MESSAGE}' in content, got {content}"
-        
+            assert (
+                ST_MESSAGE in content
+            ), f"Expected '{ST_MESSAGE}' in content, got {content}"
+
         # Clean up temporary files
         file_writer.clear_all()
         file_reader.clear_all()
@@ -306,10 +318,11 @@ class TestFileReaderSync:
         assert len(file_reader.file_paths) == 0
         assert len(file_writer.file_paths) == 0
 
+    # Sync Generator
 
-    # Sync Generator 
-
-    def test_file_reader_read_generator(self, file_reader: FileReader, file_writer: FileWriter, tmp_path):
+    def test_file_reader_read_generator(
+        self, file_reader: FileReader, file_writer: FileWriter, tmp_path
+    ):
         """Test reading from files using generator."""
         # Create temporary files
         temp_paths: List[Path] = temporary_file_handler(5, tmp_path)
@@ -332,26 +345,32 @@ class TestFileReaderSync:
                 assert ST_MESSAGE in content
 
         # Read the data back using generator
-        read_data: Dict[Path, Generator[str, None, None] | Exception] = file_reader.read_generator()
+        read_data: Dict[Path, Generator[str, None, None] | Exception] = (
+            file_reader.read_generator()
+        )
 
         # Assert data is successful
         for data in read_data.values():
             if isinstance(data, Exception):
                 pytest.fail(f"Error reading file: {data}")
-        
+
         # Unpack the generator results
         len_paths: int = len(temp_paths)
         unpacked_data: Dict[Path, str | Exception] = file_reader.unpacker(read_data)
 
         # Assert data is read
-        assert len(unpacked_data) == len_paths, f"Expected {len_paths} paths, got {len(unpacked_data)}"
+        assert (
+            len(unpacked_data) == len_paths
+        ), f"Expected {len_paths} paths, got {len(unpacked_data)}"
         for file_path, content in unpacked_data.items():
             if not isinstance(file_path, Path):
                 pytest.fail(f"Expected Path, got {type(file_path)}")
             if isinstance(content, Exception):
                 pytest.fail(f"Error reading file {file_path}: {content}")
-            assert ST_MESSAGE in content, f"Expected '{ST_MESSAGE}' in content, got {content}"
-        
+            assert (
+                ST_MESSAGE in content
+            ), f"Expected '{ST_MESSAGE}' in content, got {content}"
+
         # Clean up temporary files
         file_writer.clear_all()
         file_reader.clear_all()
@@ -360,8 +379,9 @@ class TestFileReaderSync:
         assert len(file_reader.file_paths) == 0
         assert len(file_writer.file_paths) == 0
 
-
-    def test_file_reader_cm_read_generator(self, file_reader: FileReader, file_writer: FileWriter, tmp_path):
+    def test_file_reader_cm_read_generator(
+        self, file_reader: FileReader, file_writer: FileWriter, tmp_path
+    ):
         """Test reading from files using generator with context manager."""
         # Create temporary files
         temp_paths: List[Path] = temporary_file_handler(5, tmp_path)
@@ -383,26 +403,32 @@ class TestFileReaderSync:
 
         # Read the data back using context manager and generator
         with file_reader as fr:
-            read_data: Dict[Path, Generator[str, None, None] | Exception] = fr.read_generator()
+            read_data: Dict[Path, Generator[str, None, None] | Exception] = (
+                fr.read_generator()
+            )
 
         # Assert data is successful
         for data in read_data.values():
             if isinstance(data, Exception):
                 pytest.fail(f"Error reading file: {data}")
-        
+
         # Unpack the generator results
         unpacked_data: Dict[Path, str | Exception] = file_reader.unpacker(read_data)
 
         # Assert data is read
         len_paths: int = len(temp_paths)
-        assert len(unpacked_data) == len_paths, f"Expected {len_paths} paths, got {len(unpacked_data)}"
+        assert (
+            len(unpacked_data) == len_paths
+        ), f"Expected {len_paths} paths, got {len(unpacked_data)}"
         for file_path, content in unpacked_data.items():
             if not isinstance(file_path, Path):
                 pytest.fail(f"Expected Path, got {type(file_path)}")
             if isinstance(content, Exception):
                 pytest.fail(f"Error reading file {file_path}: {content}")
-            assert ST_MESSAGE in content, f"Expected '{ST_MESSAGE}' in content, got {content}"
-       
+            assert (
+                ST_MESSAGE in content
+            ), f"Expected '{ST_MESSAGE}' in content, got {content}"
+
         # Clean up temporary files
         file_writer.clear_all()
         file_reader.clear_all()
@@ -430,7 +456,9 @@ class TestFileReaderAsync:
     """
 
     @pytest.mark.asyncio
-    async def test_file_reader_async_read(self, file_reader: FileReader, file_writer: FileWriter, tmp_path):
+    async def test_file_reader_async_read(
+        self, file_reader: FileReader, file_writer: FileWriter, tmp_path
+    ):
         """Test reading from files asynchronously."""
         # Create temporary files
         temp_paths: List[Path] = temporary_file_handler(5, tmp_path)
@@ -457,12 +485,16 @@ class TestFileReaderAsync:
 
         # Assert data is read
         len_paths: int = len(temp_paths)
-        assert len(read_data) == len_paths, f"Expected {len_paths} paths, got {len(read_data)}"
+        assert (
+            len(read_data) == len_paths
+        ), f"Expected {len_paths} paths, got {len(read_data)}"
         for file_path, content in read_data.items():
             if isinstance(content, Exception):
                 pytest.fail(f"Error reading file {file_path}: {content}")
-            assert ST_MESSAGE in content, f"Expected '{ST_MESSAGE}' in content, got {content}"
-    
+            assert (
+                ST_MESSAGE in content
+            ), f"Expected '{ST_MESSAGE}' in content, got {content}"
+
         # Clean up temporary files
         file_writer.clear_all()
         file_reader.clear_all()
@@ -471,9 +503,10 @@ class TestFileReaderAsync:
         assert len(file_reader.file_paths) == 0
         assert len(file_writer.file_paths) == 0
 
-
     @pytest.mark.asyncio
-    async def test_file_reader_cm_async_read(self, file_reader: FileReader, file_writer: FileWriter, tmp_path):
+    async def test_file_reader_cm_async_read(
+        self, file_reader: FileReader, file_writer: FileWriter, tmp_path
+    ):
         """Test reading from files asynchronously with context manager."""
         # Create temporary files
         temp_paths: List[Path] = temporary_file_handler(5, tmp_path)
@@ -499,11 +532,15 @@ class TestFileReaderAsync:
 
         # Assert data is read
         len_paths: int = len(temp_paths)
-        assert len(read_data) == len_paths, f"Expected {len_paths} paths, got {len(read_data)}"
+        assert (
+            len(read_data) == len_paths
+        ), f"Expected {len_paths} paths, got {len(read_data)}"
         for file_path, content in read_data.items():
             if isinstance(content, Exception):
                 pytest.fail(f"Error reading file {file_path}: {content}")
-            assert ST_MESSAGE in content, f"Expected '{ST_MESSAGE}' in content, got {content}"
+            assert (
+                ST_MESSAGE in content
+            ), f"Expected '{ST_MESSAGE}' in content, got {content}"
 
         # Clean up temporary files
         file_writer.clear_all()
@@ -513,11 +550,12 @@ class TestFileReaderAsync:
         assert len(file_reader.file_paths) == 0
         assert len(file_writer.file_paths) == 0
 
-
     # Async Generator
 
     @pytest.mark.asyncio
-    async def test_file_reader_async_read_generator(self, file_reader: FileReader, file_writer: FileWriter, tmp_path):
+    async def test_file_reader_async_read_generator(
+        self, file_reader: FileReader, file_writer: FileWriter, tmp_path
+    ):
         """Test reading from files asynchronously using generator."""
         # Create temporary files
         temp_paths: List[Path] = temporary_file_handler(5, tmp_path)
@@ -540,29 +578,37 @@ class TestFileReaderAsync:
                 assert ST_MESSAGE in content
 
         # Read the data back asynchronously using generator
-        read_data: Dict[Path, Generator[str, None, None] | Exception] = await file_reader.async_read_generator()
+        read_data: Dict[Path, Generator[str, None, None] | Exception] = (
+            await file_reader.async_read_generator()
+        )
 
         # Assert data is read
         len_paths: int = len(temp_paths)
-        assert len(read_data) == len_paths, f"Expected {len_paths} paths, got {len(read_data)}"
+        assert (
+            len(read_data) == len_paths
+        ), f"Expected {len_paths} paths, got {len(read_data)}"
 
         # Assert data is successful
         for data in read_data.values():
             if isinstance(data, Exception):
                 pytest.fail(f"Error reading file: {data}")
-        
+
         # Unpack the generator results
         unpacked_data: Dict[Path, str | Exception] = file_reader.unpacker(read_data)
 
         # Assert data is read
-        assert len(unpacked_data) == len_paths, f"Expected {len_paths} paths, got {len(unpacked_data)}"
+        assert (
+            len(unpacked_data) == len_paths
+        ), f"Expected {len_paths} paths, got {len(unpacked_data)}"
         for file_path, content in unpacked_data.items():
             if not isinstance(file_path, Path):
                 pytest.fail(f"Expected Path, got {type(file_path)}")
             if isinstance(content, Exception):
                 pytest.fail(f"Error reading file {file_path}: {content}")
-            assert ST_MESSAGE in content, f"Expected '{ST_MESSAGE}' in content, got {content}"
-        
+            assert (
+                ST_MESSAGE in content
+            ), f"Expected '{ST_MESSAGE}' in content, got {content}"
+
         # Clean up temporary files
         file_writer.clear_all()
         file_reader.clear_all()
@@ -571,9 +617,10 @@ class TestFileReaderAsync:
         assert len(file_reader.file_paths) == 0
         assert len(file_writer.file_paths) == 0
 
-
     @pytest.mark.asyncio
-    async def test_file_reader_cm_async_read_generator(self, file_reader: FileReader, file_writer: FileWriter, tmp_path):
+    async def test_file_reader_cm_async_read_generator(
+        self, file_reader: FileReader, file_writer: FileWriter, tmp_path
+    ):
         """Test reading from files asynchronously using generator with context manager."""
         # Create temporary files
         temp_paths: List[Path] = temporary_file_handler(5, tmp_path)
@@ -595,28 +642,36 @@ class TestFileReaderAsync:
 
         # Read the data back asynchronously using context manager and generator
         async with file_reader as fr:
-            read_data: Dict[Path, Generator[str, None, None] | Exception] = await fr.async_read_generator()
+            read_data: Dict[Path, Generator[str, None, None] | Exception] = (
+                await fr.async_read_generator()
+            )
 
         # Assert data is read
         len_paths: int = len(temp_paths)
-        assert len(read_data) == len_paths, f"Expected {len_paths} paths, got {len(read_data)}"
+        assert (
+            len(read_data) == len_paths
+        ), f"Expected {len_paths} paths, got {len(read_data)}"
 
         # Assert data is successful
         for data in read_data.values():
             if isinstance(data, Exception):
                 pytest.fail(f"Error reading file: {data}")
-            
+
         # Unpack the generator results
         unpacked_data: Dict[Path, str | Exception] = file_reader.unpacker(read_data)
 
         # Assert data is read
-        assert len(unpacked_data) == len_paths, f"Expected {len_paths} paths, got {len(unpacked_data)}"
+        assert (
+            len(unpacked_data) == len_paths
+        ), f"Expected {len_paths} paths, got {len(unpacked_data)}"
         for file_path, content in unpacked_data.items():
             if not isinstance(file_path, Path):
                 pytest.fail(f"Expected Path, got {type(file_path)}")
             if isinstance(content, Exception):
                 pytest.fail(f"Error reading file {file_path}: {content}")
-            assert ST_MESSAGE in content, f"Expected '{ST_MESSAGE}' in content, got {content}"
+            assert (
+                ST_MESSAGE in content
+            ), f"Expected '{ST_MESSAGE}' in content, got {content}"
 
         # Clean up temporary files
         file_writer.clear_all()
@@ -631,6 +686,7 @@ class TestFileReaderAsync:
 # Functionality Tests
 # ----------------------------------------------------------------------------------------------
 
+
 class TestFileReaderFunctionality:
     """
     Test FileReader functionality.
@@ -644,10 +700,13 @@ class TestFileReaderFunctionality:
     - **test_file_reader_unpacker:**
         - Test unpacking results from read_generator.
     """
-    def test_thread_safety(self, file_reader: FileReader, file_writer: FileWriter, tmp_path):
+
+    def test_thread_safety(
+        self, file_reader: FileReader, file_writer: FileWriter, tmp_path
+    ):
         """Test thread safety with concurrent writes and reads."""
         # Create temporary files
-        temp_file =[tmp_path / "thread_test_1.log", tmp_path / "thread_test_2.log"]
+        temp_file = [tmp_path / "thread_test_1.log", tmp_path / "thread_test_2.log"]
 
         try:
             # Set File Writer paths
@@ -674,9 +733,9 @@ class TestFileReaderFunctionality:
             # Wait for all threads to complete and then force the file handler to flush the buffer
             for thread in threads:
                 thread.join()
-            
+
             file_writer.buffer_force_flush()
-            
+
             # Verify all messages were written
             for file_path in file_writer:
                 assert file_path.exists()
@@ -684,7 +743,7 @@ class TestFileReaderFunctionality:
                     write_result = f.read()
                     for _ in range(100):
                         assert ST_MESSAGE in write_result
-            
+
             # Read the data back
             def read_messages(pack: Dict[Path, str | Exception], lock: threading.Lock):
                 with file_reader as fr:
@@ -692,7 +751,7 @@ class TestFileReaderFunctionality:
                     for file_path, content in read_data.items():
                         with lock:
                             pack[file_path] = content
-            
+
             # Create a shared list to store results from threads
             pack: Dict[Path, str | Exception] = {}
             lock = threading.Lock()  # Thread-safe lock
@@ -716,23 +775,34 @@ class TestFileReaderFunctionality:
             for file_path, content in pack.items():
                 if isinstance(content, Exception):
                     pytest.fail(f"Error reading file {file_path}: {content}")
-                assert ST_MESSAGE in content, f"Expected '{ST_MESSAGE}' in content, got {content}"
+                assert (
+                    ST_MESSAGE in content
+                ), f"Expected '{ST_MESSAGE}' in content, got {content}"
 
         finally:
             # Ensure that the file paths are cleared in case of any exceptions
             file_reader.clear_all()
             file_writer.clear_all()
-            assert len(file_reader.file_paths) == 0, "File paths should be cleared after operations"
-            assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
+            assert (
+                len(file_reader.file_paths) == 0
+            ), "File paths should be cleared after operations"
+            assert (
+                len(file_writer.file_paths) == 0
+            ), "File paths should be cleared after operations"
 
             for path in temp_file:
                 if path.exists():
                     path.unlink()
 
-
     @pytest.mark.asyncio
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-    async def test_memory_usage_async(self, file_reader: FileReader, file_writer: FileWriter, tmp_path, batch_size: int):
+    async def test_memory_usage_async(
+        self,
+        file_reader: FileReader,
+        file_writer: FileWriter,
+        tmp_path,
+        batch_size: int,
+    ):
         """
         Test memory usage during asynchronous file operations.
 
@@ -768,8 +838,10 @@ class TestFileReaderFunctionality:
         # Cleanup
         file_writer.clear_all()
 
-            # Assert that the file paths are cleared
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
+        # Assert that the file paths are cleared
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
         del file_writer
 
@@ -795,27 +867,33 @@ class TestFileReaderFunctionality:
         )
 
         leak_memory_kb = round((after_memory - initial_memory) / 1024, 2)
-        leak_memory_mb = round(
-            (after_memory - initial_memory) / (1024 * 1024), 2
-        )
+        leak_memory_mb = round((after_memory - initial_memory) / (1024 * 1024), 2)
 
         print(
             f"Memory difference for {batch_size} messages: {leak_memory_kb} KB ({leak_memory_mb} MB)"
         )
 
         # Assert Reading is done
-        assert len(read_data) == batch_size, f"Expected {batch_size} paths, got {len(read_data)}"
+        assert (
+            len(read_data) == batch_size
+        ), f"Expected {batch_size} paths, got {len(read_data)}"
         for file_path, content in read_data.items():
             if isinstance(content, Exception):
                 pytest.fail(f"Error reading file {file_path}: {content}")
-            assert len(content) > 0, f"File {file_path} should not be empty after reading"
-            assert ST_MESSAGE in content, f"Messages should be present in the file {file_path}"
+            assert (
+                len(content) > 0
+            ), f"File {file_path} should not be empty after reading"
+            assert (
+                ST_MESSAGE in content
+            ), f"Messages should be present in the file {file_path}"
 
         # Cleanup
         file_reader.clear_all()
 
         # Assert that the file paths are cleared
-        assert len(file_reader.file_paths) == 0, "File paths should be cleared after operations"
+        assert (
+            len(file_reader.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
         del file_reader
         del read_data
@@ -827,6 +905,7 @@ class TestFileReaderFunctionality:
 # ----------------------------------------------------------------------------------------------
 # ClassMethods Tests
 # ----------------------------------------------------------------------------------------------
+
 
 class TestFileReaderClassMethods:
     """
@@ -846,10 +925,10 @@ class TestFileReaderClassMethods:
         tmp_list: List[Path] = temporary_file_handler(2, tmp_path)
 
         config_dict: Dict[str, Any] = {
-            "file_paths" : tmp_list,
-            "retry_limit" : 10,
-            "retry_delay" : 0.5,
-            "backoff_factor" : 0.5
+            "file_paths": tmp_list,
+            "retry_limit": 10,
+            "retry_delay": 0.5,
+            "backoff_factor": 0.5,
         }
 
         my_file_reader: FileReader = FileReader.from_dict(config_dict)
@@ -859,7 +938,6 @@ class TestFileReaderClassMethods:
         assert my_file_reader.retry_limit == 10
         assert my_file_reader.retry_delay == pytest.approx(0.5)
         assert my_file_reader.backoff_factor == pytest.approx(0.5)
-
 
     def test_from_json(self, tmp_path):
         tmp_list: List[Path] = temporary_file_handler(2, tmp_path)
@@ -880,7 +958,6 @@ class TestFileReaderClassMethods:
         assert my_file_reader.retry_limit == 10
         assert my_file_reader.retry_delay == pytest.approx(0.5)
         assert my_file_reader.backoff_factor == pytest.approx(0.5)
-
 
     def test_from_yaml(self, tmp_path):
         tmp_list: List[Path] = temporary_file_handler(2, tmp_path)
@@ -939,7 +1016,6 @@ class TestFileReaderConfig:
         assert file_reader.retry_delay == pytest.approx(0.5)
         assert file_reader.backoff_factor == pytest.approx(0.1)
 
-
     def test_file_reader_config_from_json(self, file_reader: FileReader, tmp_path):
         """Test configuration of FileReader using a JSON file."""
         temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
@@ -958,7 +1034,6 @@ class TestFileReaderConfig:
         assert file_reader.retry_limit == 3
         assert file_reader.retry_delay == pytest.approx(0.5)
         assert file_reader.backoff_factor == pytest.approx(0.1)
-
 
     def test_file_reader_config_from_yaml(self, file_reader: FileReader, tmp_path):
         """Test configuration of FileReader using a YAML file."""
@@ -981,7 +1056,7 @@ class TestFileReaderConfig:
 
 # ----------------------------------------------------------------------------------------------
 # Pool Methods
-# ---------------------------------------------------------------------------------------------- 
+# ----------------------------------------------------------------------------------------------
 
 
 class TestFileReaderPoolMethods:
@@ -1003,12 +1078,10 @@ class TestFileReaderPoolMethods:
     def test_file_reader_is_pool_active(self, file_reader: FileReader):
         """Test if the thread pool is active."""
         assert file_reader.is_pool_active(), "Thread pool should be active"
-    
-    
+
     def test_file_reader_is_pool_shutdown(self, file_reader: FileReader):
         """Test if the thread pool is shutdown."""
         assert not file_reader.is_pool_shutdown(), "Thread pool should not be shutdown"
-        
 
     def test_file_reader_force_shutdown(self, file_reader: FileReader):
         """Test force shutdown of the thread pool."""
@@ -1016,12 +1089,9 @@ class TestFileReaderPoolMethods:
         file_reader.force_shutdown()
         assert file_reader.is_pool_shutdown()
 
-
     def test_file_reader_resume_pool(self, file_reader: FileReader):
         """Test resuming the thread pool."""
         file_reader.force_shutdown()
         assert file_reader.is_pool_shutdown()
         file_reader.resume_pool()
         assert file_reader.is_pool_active()
-
-

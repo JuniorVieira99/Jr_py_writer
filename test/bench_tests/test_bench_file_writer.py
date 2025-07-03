@@ -26,7 +26,7 @@ from jr_file_handler.classes.file_writer import FileWriter
 def file_writer(tmp_path) -> Generator[FileWriter, None, None]:
     """Fixture for creating a FileReader instance."""
     temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
-    
+
     file_writer = FileWriter(
         file_paths=temp_files,  # Use temp files
         retry_limit=0,
@@ -75,15 +75,13 @@ class TestFileWriterSyncPerformance:
     - **test_message_batches_no_flush:**
         - Tests the write method of FileWriter without auto-flush with different batch sizes.
     - **test_message_cm_batches_no_flush:**
-        - Tests the context manager write method of FileWriter without auto-flush with different batch sizes    
+        - Tests the context manager write method of FileWriter without auto-flush with different batch sizes
     """
 
     # Sync Performance Tests
 
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-    def test_message_batches(
-        self, file_writer: FileWriter, tmp_path, batch_size: int
-    ):
+    def test_message_batches(self, file_writer: FileWriter, tmp_path, batch_size: int):
         """
         Test the write method of FileWriter.
 
@@ -118,7 +116,9 @@ class TestFileWriterSyncPerformance:
         elapsed_time: float = end_time - start_time
 
         # Debug print
-        print(f"\nTime taken to write {batch_size} messages: {elapsed_time:.4f} seconds")
+        print(
+            f"\nTime taken to write {batch_size} messages: {elapsed_time:.4f} seconds"
+        )
 
         # Check if the log message is written to the files
         for file_path in file_writer.file_paths:
@@ -128,8 +128,9 @@ class TestFileWriterSyncPerformance:
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
     def test_cm_message_batches(
@@ -182,9 +183,7 @@ class TestFileWriterSyncPerformance:
             len(file_writer.file_paths) == 0
         ), "File paths should be cleared after context manager exit"
 
-
     # Sync With no Flush Performance Tests
-
 
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
     def test_message_batches_no_flush(
@@ -238,8 +237,9 @@ class TestFileWriterSyncPerformance:
         # Clear the file writer
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
     def test_message_cm_batches_no_flush(
@@ -269,7 +269,6 @@ class TestFileWriterSyncPerformance:
 
         # Set flush to false
         file_writer.use_write_flush = False
-
 
         start_time: float = time.time()
 
@@ -351,7 +350,9 @@ class TestFileWriterAsyncPerformance:
         end_time: float = time.time()
         elapsed_time: float = end_time - start_time
         # Debug print
-        print(f"\nAsync time taken to write {batch_size} messages: {elapsed_time:.4f} seconds")
+        print(
+            f"\nAsync time taken to write {batch_size} messages: {elapsed_time:.4f} seconds"
+        )
 
         # Check if the log message is written to the files
         for file_path in file_writer.file_paths:
@@ -361,10 +362,7 @@ class TestFileWriterAsyncPerformance:
 
         # After flushing, the buffer should be empty
         file_writer.clear_all()
-        assert (
-            file_writer.get_buffer_size == 0
-        ), "Buffer should be empty after flush"
-
+        assert file_writer.get_buffer_size == 0, "Buffer should be empty after flush"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -420,9 +418,7 @@ class TestFileWriterAsyncPerformance:
             len(file_writer.file_paths) == 0
         ), "File paths should be cleared after context manager exit"
 
-
     # Async With no Flush Performance Tests
-
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -466,7 +462,9 @@ class TestFileWriterAsyncPerformance:
 
         end_time: float = time.time()
         elapsed_time: float = end_time - start_time
-        print(f"\nAsync time taken to write {batch_size} messages: {elapsed_time:.4f} seconds")
+        print(
+            f"\nAsync time taken to write {batch_size} messages: {elapsed_time:.4f} seconds"
+        )
 
         # Check if the log message is written to the files
         for file_path in file_writer.file_paths:
@@ -478,8 +476,6 @@ class TestFileWriterAsyncPerformance:
         assert (
             len(file_writer.file_paths) == 0
         ), "File paths should be cleared after async_write"
-
-
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -561,16 +557,19 @@ class TestFileWriterSyncBenchmarks:
     - **test_bench_file_writer_cm:**
         - Benchmark test for writing messages to files using context manager.
     """
+
     @pytest.mark.benchmark(group="FileWriterSync")
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-    def test_bench_file_writer(self, benchmark, file_writer: FileWriter, batch_size: int, tmp_path) -> None:
+    def test_bench_file_writer(
+        self, benchmark, file_writer: FileWriter, batch_size: int, tmp_path
+    ) -> None:
         """Benchmark test for writing messages to files."""
 
         # Make temporary paths
-        temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)  
+        temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
 
         # Set the file paths in the file writer
-        file_writer.file_paths = temp_files     
+        file_writer.file_paths = temp_files
 
         # Benchmark the write operation
         def write_messages():
@@ -579,12 +578,15 @@ class TestFileWriterSyncBenchmarks:
         benchmark(write_messages)
 
         # Assert that all messages were written
-        assert len(file_writer.file_paths) == batch_size, f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
+        assert (
+            len(file_writer.file_paths) == batch_size
+        ), f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterSync")
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -609,12 +611,15 @@ class TestFileWriterSyncBenchmarks:
         benchmark(write_messages_no_flush)
 
         # Assert that all messages were written
-        assert len(file_writer.file_paths) == batch_size, f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
+        assert (
+            len(file_writer.file_paths) == batch_size
+        ), f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterSync")
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -641,8 +646,9 @@ class TestFileWriterSyncBenchmarks:
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterSync")
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -666,14 +672,16 @@ class TestFileWriterSyncBenchmarks:
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-    
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
+
 
 class TestFileWriterAsyncBenchmarks:
     """
     Benchmark async tests for FileWriter class.
     These tests measure the time taken to write messages in batches and using context managers.
-    
+
     Tests:
     -------
     - **test_bench_file_writer_async:**
@@ -685,6 +693,7 @@ class TestFileWriterAsyncBenchmarks:
     - **test_bench_file_writer_cm_async_no_flush:**
         - Benchmark test for writing messages to files asynchronously using context manager without auto-flush.
     """
+
     @pytest.mark.benchmark(group="FileWriterAsync")
     @pytest.mark.asyncio
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -706,13 +715,16 @@ class TestFileWriterAsyncBenchmarks:
         benchmark(write_messages_async)
 
         # Assert that all messages were written
-        assert len(file_writer.file_paths) == batch_size, f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
+        assert (
+            len(file_writer.file_paths) == batch_size
+        ), f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
-    
     @pytest.mark.benchmark(group="FileWriterAsync")
     @pytest.mark.asyncio
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -737,12 +749,15 @@ class TestFileWriterAsyncBenchmarks:
         await benchmark(write_messages_async_no_flush)
 
         # Assert that all messages were written
-        assert len(file_writer.file_paths) == batch_size, f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
+        assert (
+            len(file_writer.file_paths) == batch_size
+        ), f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterAsync")
     @pytest.mark.asyncio
@@ -767,8 +782,9 @@ class TestFileWriterAsyncBenchmarks:
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterAsync")
     @pytest.mark.asyncio
@@ -796,7 +812,9 @@ class TestFileWriterAsyncBenchmarks:
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
 
 # ----------------------------------------------------------------------------------------------
@@ -815,7 +833,8 @@ class TestFileWriterMemoryUsage:
         - Tests memory usage during file operations.
     - **test_memory_usage_async:**
         - Tests memory usage during async file operations.
-    """     
+    """
+
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
     def test_memory_usage(self, tmp_path, batch_size: int):
         """
@@ -879,7 +898,9 @@ class TestFileWriterMemoryUsage:
             f"After memory usage: {after_memory} bytes ({after_memory_kb} KB, {after_memory_mb} MB)"
         )
 
-        leak_memory_kb = round((after_memory - initial_memory) / 1024, 2)  # Convert to KB
+        leak_memory_kb = round(
+            (after_memory - initial_memory) / 1024, 2
+        )  # Convert to KB
         leak_memory_mb = round(
             (after_memory - initial_memory) / (1024 * 1024), 2
         )  # Convert to MB
@@ -890,16 +911,19 @@ class TestFileWriterMemoryUsage:
         # Cleanup
         handler.clear_all()
 
-        assert len(handler.file_paths) == 0, "File paths should be cleared after operations"
+        assert (
+            len(handler.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
         with open(temp_file, "r") as f:
             content = f.read()
-            assert len(content) > 0, "Log file should not be empty after writing messages"
+            assert (
+                len(content) > 0
+            ), "Log file should not be empty after writing messages"
             for i in range(batch_size):
                 assert (
                     f"Memory test message {i}" in content
                 ), f"Log message {i} should be present in the file"
-
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -962,7 +986,9 @@ class TestFileWriterMemoryUsage:
             f"After memory usage: {after_memory} bytes ({after_memory_kb} KB, {after_memory_mb} MB)"
         )
 
-        leak_memory_kb = round((after_memory - initial_memory) / 1024, 2)  # Convert to KB
+        leak_memory_kb = round(
+            (after_memory - initial_memory) / 1024, 2
+        )  # Convert to KB
         leak_memory_mb = round(
             (after_memory - initial_memory) / (1024 * 1024), 2
         )  # Convert to MB
@@ -973,7 +999,9 @@ class TestFileWriterMemoryUsage:
         # Cleanup
         handler.clear_all()
 
-        assert len(handler.file_paths) == 0, "File paths should be cleared after operations"
+        assert (
+            len(handler.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
         with open(temp_file, "r") as f:
             content = f.read()
@@ -993,18 +1021,22 @@ class TestFileWriterSyncStress:
 
     @pytest.mark.benchmark(group="FileWriterSyncStress")
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-    def test_bench_stress(self, benchmark, file_writer: FileWriter, batch_size: int, tmp_path) -> None:
+    def test_bench_stress(
+        self, benchmark, file_writer: FileWriter, batch_size: int, tmp_path
+    ) -> None:
         """
         Benchmark test for writing a large number of messages to files.
         """
 
-        long_message: str = ST_MESSAGE * 1000  # Create a long message by repeating the string
+        long_message: str = (
+            ST_MESSAGE * 1000
+        )  # Create a long message by repeating the string
 
         # Make temporary paths
-        temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)  
+        temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
 
         # Set the file paths in the file writer
-        file_writer.file_paths = temp_files     
+        file_writer.file_paths = temp_files
 
         # Benchmark the write operation
         def write_messages():
@@ -1013,12 +1045,15 @@ class TestFileWriterSyncStress:
         benchmark(write_messages)
 
         # Assert that all messages were written
-        assert len(file_writer.file_paths) == batch_size, f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
+        assert (
+            len(file_writer.file_paths) == batch_size
+        ), f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterSyncStress")
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -1029,7 +1064,9 @@ class TestFileWriterSyncStress:
         Benchmark test for writing a large number of messages to files without auto-flush.
         """
 
-        long_message: str = ST_MESSAGE * 1000  # Create a long message by repeating the string
+        long_message: str = (
+            ST_MESSAGE * 1000
+        )  # Create a long message by repeating the string
 
         # Make temporary paths
         temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
@@ -1047,12 +1084,15 @@ class TestFileWriterSyncStress:
         benchmark(write_messages_no_flush)
 
         # Assert that all messages were written
-        assert len(file_writer.file_paths) == batch_size, f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
+        assert (
+            len(file_writer.file_paths) == batch_size
+        ), f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterSyncStress")
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -1063,7 +1103,9 @@ class TestFileWriterSyncStress:
         Benchmark test for writing a large number of messages to files using context manager.
         """
 
-        long_message: str = ST_MESSAGE * 1000  # Create a long message by repeating the string
+        long_message: str = (
+            ST_MESSAGE * 1000
+        )  # Create a long message by repeating the string
 
         # Make temporary paths
         temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
@@ -1080,8 +1122,9 @@ class TestFileWriterSyncStress:
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterSyncStress")
     @pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
@@ -1092,7 +1135,9 @@ class TestFileWriterSyncStress:
         Benchmark test for writing a large number of messages to files using context manager without auto-flush.
         """
 
-        long_message: str = ST_MESSAGE * 1000  # Create a long message by repeating the string
+        long_message: str = (
+            ST_MESSAGE * 1000
+        )  # Create a long message by repeating the string
 
         # Make temporary paths
         temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
@@ -1112,7 +1157,9 @@ class TestFileWriterSyncStress:
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
 
 class TestFileWriterAsyncStress:
@@ -1127,7 +1174,9 @@ class TestFileWriterAsyncStress:
         Benchmark test for writing a large number of messages to files asynchronously.
         """
 
-        long_message: str = ST_MESSAGE * 1000  # Create a long message by repeating the string
+        long_message: str = (
+            ST_MESSAGE * 1000
+        )  # Create a long message by repeating the string
 
         # Make temporary paths
         temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
@@ -1142,12 +1191,15 @@ class TestFileWriterAsyncStress:
         await benchmark(write_messages_async)
 
         # Assert that all messages were written
-        assert len(file_writer.file_paths) == batch_size, f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
+        assert (
+            len(file_writer.file_paths) == batch_size
+        ), f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterAsyncStress")
     @pytest.mark.asyncio
@@ -1159,7 +1211,9 @@ class TestFileWriterAsyncStress:
         Benchmark test for writing a large number of messages to files asynchronously without auto-flush.
         """
 
-        long_message: str = ST_MESSAGE * 1000  # Create a long message by repeating the string
+        long_message: str = (
+            ST_MESSAGE * 1000
+        )  # Create a long message by repeating the string
 
         # Make temporary paths
         temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
@@ -1177,11 +1231,14 @@ class TestFileWriterAsyncStress:
         await benchmark(write_messages_async_no_flush)
 
         # Assert that all messages were written
-        assert len(file_writer.file_paths) == batch_size, f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
+        assert (
+            len(file_writer.file_paths) == batch_size
+        ), f"Expected {batch_size} messages, got {len(file_writer.file_paths)}"
 
         file_writer.clear_all()
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterAsyncStress")
     @pytest.mark.asyncio
@@ -1205,13 +1262,14 @@ class TestFileWriterAsyncStress:
         async def write_messages_cm_async():
             async with file_writer as fw:
                 await fw.async_write(long_message)
-        
+
         await benchmark(write_messages_cm_async)
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
     @pytest.mark.benchmark(group="FileWriterAsyncStress")
     @pytest.mark.asyncio
@@ -1219,7 +1277,7 @@ class TestFileWriterAsyncStress:
     async def test_bench_stress_cm_async_no_flush(
         self, benchmark, file_writer: FileWriter, batch_size: int, tmp_path
     ) -> None:
-        """ 
+        """
         Benchmark test for writing a large number of messages to files asynchronously using context manager without auto-flush.
         """
 
@@ -1238,13 +1296,14 @@ class TestFileWriterAsyncStress:
         async def write_messages_cm_async():
             async with file_writer as fw:
                 await fw.async_write(long_message)
-        
+
         await benchmark(write_messages_cm_async)
 
         file_writer.clear_all()
 
-        assert len(file_writer.file_paths) == 0, "File paths should be cleared after operations"
-
+        assert (
+            len(file_writer.file_paths) == 0
+        ), "File paths should be cleared after operations"
 
 
 # ----------------------------------------------------------------------------------------------

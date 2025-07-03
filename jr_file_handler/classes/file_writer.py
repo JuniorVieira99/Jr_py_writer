@@ -12,7 +12,7 @@ import time
 import json
 import yaml
 
-from typing import Iterator, List, Union, Dict, Any
+from typing import Iterator, List, Sequence, Union, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
@@ -46,12 +46,23 @@ from jr_file_handler.exceptions.exceptions_file_writer import (
 # Classes
 # ----------------------------------------------------------------------------------------------
 
+LIST_OF_NECESSARY_KEYS: List[str] = [
+    "file_paths",
+    "write_mode",
+    "retry_limit",
+    "retry_delay",
+    "backoff_factor",
+    "max_file_size",
+    "max_rotation",
+    "max_buffer_size",
+    "use_write_flush",
+    "logger",
+]
+
 
 class FileWriter:
-    
 
-
-     # --------------
+    # --------------
     # Slots
 
     __slots__ = (
@@ -98,6 +109,8 @@ class FileWriter:
         """
         Returns the list of file paths for logging.
         """
+        if not hasattr(self, "_file_paths"):
+            self._file_paths = []
         return self._file_paths
 
     @property
@@ -190,13 +203,17 @@ class FileWriter:
             paths (List[Path]) : A list of file paths.
         """
         try:
+            if paths is None:
+                self._file_paths = []
+                return
+
             if not isinstance(paths, list):
                 raise ValueError(
                     f"File paths must be a list of Path objects, got {type(paths).__name__}"
                 )
 
             if not paths:
-                raise ValueError("File paths list cannot be empty")
+                self._file_paths = []
 
             for path in paths:
                 if not isinstance(path, Path):
@@ -412,7 +429,7 @@ class FileWriter:
 
     def __init__(
         self,
-        file_paths: List[Union[Path, str]],
+        file_paths: Union[List[Union[Path, str]], None] = None,
         write_mode: LogWriteMode = LogWriteMode.APPEND,
         retry_limit: int = 2,
         retry_delay: float = 0.1,
@@ -473,16 +490,25 @@ class FileWriter:
             -   Must manually flush using `writer_force_flush()` method, or automatically with context manager.
 
         """
+
         try:
+            # Ensure file_paths is a list of Path objects
             out_list = []
-            for path in file_paths:
-                if isinstance(path, str):
-                    path = Path(path)
-                elif not isinstance(path, Path):
-                    raise ValueError(
-                        f"Invalid file path: {path}. Must be a Path or str."
+            if file_paths is None:
+                out_list = []
+            else:
+                if not isinstance(file_paths, list):
+                    raise TypeError(
+                        f"File paths must be a list of Path or str objects, got {type(file_paths).__name__}"
                     )
-                out_list.append(path)
+                for path in file_paths:
+                    if isinstance(path, str):
+                        path = Path(path)
+                    elif not isinstance(path, Path):
+                        raise ValueError(
+                            f"Invalid file path: {path}. Must be a Path or str."
+                        )
+                    out_list.append(path)
 
             if logger is not None:
                 self.logger = logger
@@ -751,7 +777,7 @@ class FileWriter:
             if not self._temp_sync_pool:
                 return
 
-            for path in list(self._temp_sync_pool.keys()):
+            for path in self._temp_sync_pool.keys():
                 file = self._temp_sync_pool[path]
                 try:
                     if isinstance(file, TextIOWrapper) and not file.closed:
@@ -1175,7 +1201,6 @@ class FileWriter:
         for path_batch in batches_of_paths:
             await self._async_log_batch(message, path_batch)
 
-
     # --------------
     # Methods
 
@@ -1206,7 +1231,6 @@ class FileWriter:
             if not self._threadpool._shutdown:
                 self._threadpool.shutdown(wait=True)
 
-
     # Logging
 
     def write(self, message: str) -> None:
@@ -1225,8 +1249,12 @@ class FileWriter:
 
             if not self.file_paths:
                 return
-            
-            if self.write_mode not in (LogWriteMode.APPEND, LogWriteMode.OVERWRITE, LogWriteMode.READ_WRITE):
+
+            if self.write_mode not in (
+                LogWriteMode.APPEND,
+                LogWriteMode.OVERWRITE,
+                LogWriteMode.READ_WRITE,
+            ):
                 raise ValueError(
                     f"FileWriter is not configured for writing. Use LogWriteMode.APPEND, LogWriteMode.OVERWRITE, or LogWriteMode.READ_WRITE."
                     f"\n\tCurrent mode: {self.write_mode.value}\n"
@@ -1260,7 +1288,6 @@ class FileWriter:
                 f"Error writing log message: {e.__class__.__name__} -> {e}"
             ) from e
 
-
     async def async_write(self, message: str) -> None:
         """
         Asynchronously write the message to the file(s).
@@ -1277,8 +1304,12 @@ class FileWriter:
 
             if not self.file_paths:
                 return
-            
-            if self.write_mode not in (LogWriteMode.APPEND, LogWriteMode.OVERWRITE, LogWriteMode.READ_WRITE):
+
+            if self.write_mode not in (
+                LogWriteMode.APPEND,
+                LogWriteMode.OVERWRITE,
+                LogWriteMode.READ_WRITE,
+            ):
                 raise ValueError(
                     f"FileWriter is not configured for writing. Use LogWriteMode.APPEND, LogWriteMode.OVERWRITE, or LogWriteMode.READ_WRITE."
                     f"\n\tCurrent mode: {self.write_mode.value}\n"
@@ -1312,7 +1343,6 @@ class FileWriter:
                 f"Error writing log message asynchronously: {e.__class__.__name__} -> {e}"
             ) from e
 
-
     # Buffer Management
 
     def buffer_force_flush(self) -> None:
@@ -1341,7 +1371,6 @@ class FileWriter:
             raise FileWriterBufferError(
                 f"Error forcing buffer flush: {e.__class__.__name__} -> {e}"
             ) from e
-
 
     # Writer Performance
 
@@ -1372,7 +1401,6 @@ class FileWriter:
             raise FileWriterFlushError(
                 f"Error forcing flush: {e.__class__.__name__} -> {e}"
             ) from e
-
 
     # Thread Pool Management
 
@@ -1425,4 +1453,468 @@ class FileWriter:
             )
             raise FileWriterResumeError(
                 f"Error resuming thread pool executor: {e.__class__.__name__} -> {e}"
+            ) from e
+
+    def is_pool_shutdown(self) -> bool:
+        """
+        Check if the thread pool executor is shutdown.
+
+        Returns:
+            bool: True if the thread pool executor is shutdown, False otherwise.
+        """
+        return self._threadpool._shutdown if hasattr(self, "_threadpool") else True
+
+    def is_pool_active(self) -> bool:
+        """
+        Check if the thread pool executor is active.
+
+        Returns:
+            bool: True if the thread pool executor is active, False otherwise.
+        """
+        return not self._threadpool._shutdown if hasattr(self, "_threadpool") else False
+
+    # Class Methods
+
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "FileWriter":
+        """
+        Create a FileWriter instance from a configuration dictionary.
+
+        Arguments:
+            config_dict (Dict[str, Any]): The configuration dictionary containing file paths and other settings.
+
+        Returns:
+            out (FileWriter): An instance of FileWriter configured with the provided settings.
+        """
+        try:
+
+            if not isinstance(config_dict, dict):
+                raise TypeError("Configuration must be a dictionary.")
+
+            if len(config_dict) == 0:
+                raise ValueError("Configuration dictionary is empty.")
+
+            for key in config_dict:
+                if key not in LIST_OF_NECESSARY_KEYS:
+                    raise KeyError(
+                        f"Invalid key '{key}' in configuration. "
+                        f"Allowed keys are: {', '.join(LIST_OF_NECESSARY_KEYS)}"
+                    )
+
+            # Extract configuration parameters from the dictionary
+            file_paths: Sequence[Path | str] = config_dict.get("file_paths", [])
+            write_mode: LogWriteMode = config_dict.get(
+                "write_mode", LogWriteMode.APPEND
+            )
+            max_file_size: int = config_dict.get(
+                "max_file_size", 10 * 1024 * 1024
+            )  # Default 10 MB
+            max_rotation: int = config_dict.get(
+                "max_rotation", 5
+            )  # Default 5 rotations
+            max_buffer_size: int = config_dict.get(
+                "max_buffer_size", 0
+            )  # Default no buffer
+            retry_limit: int = config_dict.get("retry_limit", 3)  # Default retry limit
+            retry_delay: float = config_dict.get(
+                "retry_delay", 1.0
+            )  # Default retry delay in seconds
+            backoff_factor: float = config_dict.get(
+                "backoff_factor", 0.2
+            )  # Default backoff factor for retries
+            logger: logging.Logger = config_dict.get(
+                "logger", logging.getLogger(__name__)
+            )
+
+            return cls(
+                file_paths=[Path(p) for p in file_paths] if file_paths else [],
+                write_mode=write_mode,
+                max_file_size=max_file_size,
+                max_rotation=max_rotation,
+                max_buffer_size=max_buffer_size,
+                retry_limit=retry_limit,
+                retry_delay=retry_delay,
+                backoff_factor=backoff_factor,
+                logger=logger,
+            )
+
+        except Exception as e:
+            raise FileWriterConfigError(
+                f"Error creating FileWriter from config: {e.__class__.__name__} -> {e}"
+            ) from e
+
+    @classmethod
+    def from_json(
+        cls, json_file: Union[str, bytes], custom_decoder: str = "utf-8"
+    ) -> "FileWriter":
+        """
+        Create a FileWriter instance from a JSON file.
+
+        Arguments:
+            json_file (Union[str, bytes]): The path to the JSON file or the JSON content as a string.
+            custom_decoder (str): The encoding to use for decoding the JSON file content.
+                - Default is 'utf-8'.
+
+        Returns:
+            out (FileWriter): An instance of FileWriter configured with the provided settings.
+        """
+
+        try:
+
+            if not isinstance(json_file, (str, bytes)):
+                raise TypeError("json_file must be a string or bytes.")
+
+            if not isinstance(custom_decoder, str):
+                raise TypeError(
+                    "custom_decoder must be a string representing the encoding."
+                )
+
+            if custom_decoder not in ["utf-8", "utf-16", "latin-1"]:
+                raise ValueError(
+                    "custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'."
+                )
+
+            json_str: str = (
+                json_file
+                if isinstance(json_file, str)
+                else json_file.decode(custom_decoder)
+            )
+
+            if not json_str:
+                raise ValueError("JSON file content is empty.")
+
+            json_dict: Dict[str, Any] = json.loads(json_str)
+
+            return cls.from_dict(json_dict)
+
+        except Exception as e:
+            raise FileWriterConfigError(
+                f"Error creating FileWriter from JSON: {e.__class__.__name__} -> {e}"
+            ) from e
+
+    @classmethod
+    def from_yaml(
+        cls, yaml_file: Union[str, bytes], custom_decoder: str = "utf-8"
+    ) -> "FileWriter":
+        """
+        Create a FileWriter instance from a YAML file.
+
+        Arguments:
+            yaml_file (Union[str, bytes]): The path to the YAML file or the YAML content as a string.
+            custom_decoder (str): The encoding to use for decoding the YAML file content.
+                - Default is 'utf-8'.
+
+        Returns:
+            out (FileWriter): An instance of FileWriter configured with the provided settings.
+        """
+        try:
+
+            if not isinstance(yaml_file, (str, bytes)):
+                raise TypeError("yaml_file must be a string or bytes.")
+
+            if not isinstance(custom_decoder, str):
+                raise TypeError(
+                    "custom_decoder must be a string representing the encoding."
+                )
+
+            if custom_decoder not in ["utf-8", "utf-16", "latin-1"]:
+                raise ValueError(
+                    "custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'."
+                )
+
+            yaml_str: str = (
+                yaml_file
+                if isinstance(yaml_file, str)
+                else yaml_file.decode(custom_decoder)
+            )
+
+            if not yaml_str:
+                raise ValueError("YAML file content is empty.")
+
+            yaml_dict: Dict[str, Any] = yaml.safe_load(yaml_str)
+
+            return cls.from_dict(yaml_dict)
+
+        except Exception as e:
+            raise FileWriterConfigError(
+                f"Error creating FileWriter from YAML: {e.__class__.__name__} -> {e}"
+            ) from e
+
+    # Configuration
+
+    def config(
+        self,
+        file_paths: Union[List[Path], None] = None,
+        write_mode: LogWriteMode = LogWriteMode.APPEND,
+        max_file_size: int = 10 * 1024 * 1024,  # Default 10 MB
+        max_rotation: int = 5,  # Default 5 rotations
+        max_buffer_size: int = 0,  # Default no buffer
+        retry_limit: int = 3,  # Default retry limit
+        retry_delay: float = 1.0,  # Default retry delay in seconds
+        backoff_factor: float = 0.2,  # Default backoff factor for retries
+    ) -> None:
+        """
+        Configure the FileWriter with the specified parameters.
+
+        Arguments:
+            file_paths (List[Path]): List of file paths to write to.
+                - Default is `None`, which means no file paths are set.
+            write_mode (LogWriteMode): The mode in which to write to the files.
+                - Default is `LogWriteMode.APPEND`.
+            max_file_size (int): Maximum size of each log file in bytes.
+                - Default is `10 * 1024 * 1024` (10 MB).
+            max_rotation (int): Maximum number of rotated files to keep.
+                - Default is `5`.
+            max_buffer_size (int): Maximum size of the buffer in bytes.
+                - Default is `0`, which means no buffer is used.
+            retry_limit (int): Number of retries for writing to files.
+                - Default is `3`.
+            retry_delay (float): Delay between retries in seconds.
+                - Default is `1.0`.
+            backoff_factor (float): Factor by which the delay increases on each retry.
+                - Default is `0.2 `.
+        Raises:
+            FileWriterConfigError: If there is an error in configuring the FileWriter.
+        """
+        try:
+
+            # Force flush the buffer before reconfiguring
+            self.buffer_force_flush()
+
+            # Wait for pool to shutdown if it exists
+            if self.is_pool_active():
+                self.force_shutdown(wait=True)
+
+            self.file_paths = file_paths if file_paths is not None else []
+            self.write_mode = write_mode
+            self.max_file_size = max_file_size
+            self.max_rotation = max_rotation
+            self.max_buffer_size = max_buffer_size
+            self.retry_limit = retry_limit
+            self.retry_delay = retry_delay
+            self.backoff_factor = backoff_factor
+            self._buffer = StringIO()
+
+            # Initialize the synchronous pool
+            self._init_sync_pool()
+
+            # Initialize the thread pool executor
+            if hasattr(self, "_threadpool") and self._threadpool:
+                self.resume_pool()
+
+            # If the thread pool executor does not exist, create it
+            else:
+                max_workers: int = (
+                    min(len(self.file_paths), 4) if len(self.file_paths) > 1 else 1
+                )
+                if os.name == "nt":
+                    max_workers: int = min(max_workers, 4)  # Windows file handle limits
+                else:
+                    max_workers: int = min(max_workers, os.cpu_count() or 4)
+                self._threadpool = ThreadPoolExecutor(
+                    max_workers=max_workers,
+                )
+        except Exception as e:
+            self.logger.error(
+                f"Error configuring FileWriter: {e.__class__.__name__} -> {e}"
+            )
+            raise FileWriterConfigError(
+                f"Error configuring FileWriter: {e.__class__.__name__} -> {e}"
+            ) from e
+
+    def config_from_dict(
+        self,
+        config: Dict[str, Any],
+    ) -> None:
+        """
+        Configure the FileWriter using a dictionary of parameters.
+
+        Arguments:
+            config (Dict[str, Any]): Dictionary containing configuration parameters.
+
+        Defaults:
+        ----------
+        **file_paths (List[Path]):**
+            - List of file paths to write to.
+            - Default is `None`, which means no file paths are set.
+        **write_mode (LogWriteMode):**
+            - The mode in which to write to the files.
+            - Default is `LogWriteMode.APPEND`.
+        **max_file_size (int):**
+            - Maximum size of each log file in bytes.
+            - Default is `10 * 1024 * 1024` (10 MB).
+        **max_rotation (int):**
+            - Maximum number of rotated files to keep.
+            - Default is `5`.
+        **max_buffer_size (int):**
+            - Maximum size of the buffer in bytes.
+            - Default is `0`, which means no buffer is used.
+        **retry_limit (int):**
+            - Number of retries for writing to files.
+            - Default is `3`.
+        **retry_delay (float):**
+            - Delay between retries in seconds.
+            - Default is `1.0`.
+        **backoff_factor (float):**
+            - Factor by which the delay increases on each retry.
+            - Default is `0.2`.
+
+        Raises:
+            FileWriterConfigError: If there is an error in configuring the FileWriter.
+        """
+        try:
+
+            if not isinstance(config, dict):
+                raise ValueError("Configuration must be a dictionary")
+            if not config:
+                raise ValueError("Configuration dictionary cannot be empty")
+
+            for key in config:
+                if key not in LIST_OF_NECESSARY_KEYS:
+                    raise ValueError(
+                        f"Invalid configuration key: {key}. "
+                        f"Allowed keys are: {', '.join(LIST_OF_NECESSARY_KEYS)}"
+                    )
+
+            # Extract configuration parameters from the dictionary
+            file_paths: Union[List[Path], None] = config.get("file_paths", None)
+            write_mode: LogWriteMode = config.get("write_mode", LogWriteMode.APPEND)
+            max_file_size: int = config.get(
+                "max_file_size", 10 * 1024 * 1024
+            )  # Default 10 MB
+            max_rotation: int = config.get("max_rotation", 5)  # Default 5 rotations
+            max_buffer_size: int = config.get("max_buffer_size", 0)  # Default no buffer
+            retry_limit: int = config.get("retry_limit", 3)  # Default retry limit
+            retry_delay: float = config.get(
+                "retry_delay", 1.0
+            )  # Default retry delay in seconds
+            backoff_factor: float = config.get(
+                "backoff_factor", 0.2
+            )  # Default backoff factor for retries
+
+            # Call the config method with the extracted parameters
+            self.config(
+                file_paths=file_paths,
+                write_mode=write_mode,
+                max_file_size=max_file_size,
+                max_rotation=max_rotation,
+                max_buffer_size=max_buffer_size,
+                retry_limit=retry_limit,
+                retry_delay=retry_delay,
+                backoff_factor=backoff_factor,
+            )
+        except Exception as e:
+            self.logger.error(f"Error configuring FileWriter from dict: {e}")
+            raise FileWriterConfigError(
+                f"Error configuring FileWriter from dict: {e}"
+            ) from e
+
+    def config_from_json(
+        self, json_file: Union[str, bytes], custom_decoder: str = "utf-8"
+    ) -> None:
+        """
+        Configure the FileWriter using a JSON file.
+
+        Arguments:
+            json_file (Union[str, bytes]): The path to the JSON file or the JSON content as a string.
+            custom_decoder (str): The encoding to use for decoding the JSON file content.
+                - Default is 'utf-8'.
+        """
+        try:
+            if not isinstance(json_file, (str, bytes)):
+                raise TypeError("json_file must be a string or bytes.")
+
+            if not isinstance(custom_decoder, str):
+                raise TypeError(
+                    "custom_decoder must be a string representing the encoding."
+                )
+
+            if custom_decoder not in ["utf-8", "utf-16", "latin-1"]:
+                raise ValueError(
+                    "custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'."
+                )
+
+            json_str: str = (
+                json_file
+                if isinstance(json_file, str)
+                else json_file.decode(custom_decoder)
+            )
+
+            if not json_str:
+                raise ValueError("JSON file content is empty.")
+
+            config_dict: Dict[str, Any] = json.loads(json_str)
+            self.config_from_dict(config_dict)
+        except Exception as e:
+            raise FileWriterConfigError(
+                f"Error updating FileReader configuration from JSON: {e.__class__.__name__} -> {e}"
+            ) from e
+
+    def config_from_yaml(
+        self, yaml_file: Union[str, bytes], custom_decoder: str = "utf-8"
+    ) -> None:
+        """
+        Configure the FileWriter using a YAML file.
+
+        Arguments:
+            yaml_file (Union[str, bytes]): The path to the YAML file or the YAML content as a string.
+            custom_decoder (str): The encoding to use for decoding the YAML file content.
+                - Default is 'utf-8'.
+        """
+        try:
+            if not isinstance(yaml_file, (str, bytes)):
+                raise TypeError("yaml_file must be a string or bytes.")
+
+            if not isinstance(custom_decoder, str):
+                raise TypeError(
+                    "custom_decoder must be a string representing the encoding."
+                )
+
+            if custom_decoder not in ["utf-8", "utf-16", "latin-1"]:
+                raise ValueError(
+                    "custom_decoder must be one of 'utf-8', 'utf-16', or 'latin-1'."
+                )
+
+            yaml_str: str = (
+                yaml_file
+                if isinstance(yaml_file, str)
+                else yaml_file.decode(custom_decoder)
+            )
+
+            if not yaml_str:
+                raise ValueError("YAML file content is empty.")
+
+            config_dict: Dict[str, Any] = yaml.safe_load(yaml_str)
+            self.config_from_dict(config_dict)
+        except Exception as e:
+            raise FileWriterConfigError(
+                f"Error updating FileReader configuration from YAML: {e.__class__.__name__} -> {e}"
+            ) from e
+
+    # Reset
+
+    def reset_to_defaults(self) -> None:
+        """
+        Reset the FileWriter to its default configuration.
+        This method will reset all parameters to their default values.
+        """
+        try:
+            self.clear_all()  # Clear all resources before resetting
+
+            self.config(
+                file_paths=None,
+                write_mode=LogWriteMode.APPEND,
+                max_file_size=10 * 1024 * 1024,  # Default 10 MB
+                max_rotation=5,  # Default 5 rotations
+                max_buffer_size=0,  # Default no buffer
+                retry_limit=3,  # Default retry limit
+                retry_delay=1.0,  # Default retry delay in seconds
+                backoff_factor=0.2,  # Default backoff factor for retries
+            )
+        except Exception as e:
+            self.logger.error(
+                f"Error resetting FileWriter to defaults: {e.__class__.__name__} -> {e}"
+            )
+            raise FileWriterResetError(
+                f"Error resetting FileWriter to defaults: {e.__class__.__name__} -> {e}"
             ) from e

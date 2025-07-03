@@ -36,7 +36,7 @@ from jr_file_handler.exceptions.exceptions_file_writer import (
 def file_writer(tmp_path) -> Generator[FileWriter, None, None]:
     """Fixture for creating a FileReader instance."""
     temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
-    
+
     file_writer = FileWriter(
         file_paths=temp_files,  # Use temp files
         retry_limit=0,
@@ -75,10 +75,8 @@ EDGE_FLOAT = [-1.0, "1.0", [], {}, (), set(), None, b"byte"]
 
 EDGE_PATHS = [
     (),
-    [],
     {},
     set(),
-    None,
     b"byte",
     55,
     1.0,
@@ -116,9 +114,11 @@ class TestFileWriterEdge:
         # Test with invalid file_paths
         with pytest.raises(FileWriterConstructionError):
             FileWriter(
-                file_paths=edge_value, retry_limit=0, retry_delay=0.0, backoff_factor=0.0
+                file_paths=edge_value,
+                retry_limit=0,
+                retry_delay=0.0,
+                backoff_factor=0.0,
             )
-
 
     @pytest.mark.parametrize("edge_value", EDGE_INT)
     def test_file_writer_edge_constructor_int(self, tmp_path, edge_value):
@@ -136,7 +136,6 @@ class TestFileWriterEdge:
         with pytest.raises(FileWriterConstructionError):
             FileWriter(temp_files, max_rotation=edge_value)
 
-
     @pytest.mark.parametrize("edge_value", EDGE_FLOAT)
     def test_file_writer_edge_constructor_float(self, tmp_path, edge_value):
         """Test edge cases for FileWriter constructor."""
@@ -149,7 +148,6 @@ class TestFileWriterEdge:
         # Test with invalid backoff_factor
         with pytest.raises(FileWriterConstructionError):
             FileWriter(temp_files, backoff_factor=edge_value)
-
 
     def test_file_writer_edge_setters(self, file_writer: FileWriter):
         """Test edge cases for FileWriter."""
@@ -178,15 +176,13 @@ class TestFileWriterEdge:
         with pytest.raises(FileWriterSettingsError):
             file_writer.max_rotation = -1
 
-
     @pytest.mark.parametrize("edge_value", EDGE_LOG)
-    def test_file_writer_edge_message(self,file_writer: FileWriter, edge_value):
+    def test_file_writer_edge_message(self, file_writer: FileWriter, edge_value):
         """Test edge cases for FileWriter log method."""
 
         # Test with invalid log message type
         with pytest.raises(FileWriterWriteError):
             file_writer.write(edge_value)
-
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("edge_value", EDGE_LOG)
@@ -202,6 +198,7 @@ class TestFileWriterEdge:
 # ----------------------------------------------------------------------------------------------
 # Overall Tests
 # ----------------------------------------------------------------------------------------------
+
 
 class TestFileWriterOverall:
     """
@@ -228,7 +225,6 @@ class TestFileWriterOverall:
         assert file_writer.max_file_size == 10 * 1024 * 1024  # 10 MB
         assert file_writer.max_rotation == 5
 
-
     def test_file_writer_setters(self, file_writer: FileWriter):
         """Test the setters of FileWriter."""
         # Test setting file_paths
@@ -253,7 +249,6 @@ class TestFileWriterOverall:
         file_writer.backoff_factor = 0.5
         assert file_writer.backoff_factor == pytest.approx(0.5)
 
-
     def test_file_writer_write(self, file_writer: FileWriter, tmp_path):
         """Test the log method of FileWriter."""
         log_message = "Test log message for FileWriter"
@@ -277,7 +272,6 @@ class TestFileWriterOverall:
 
         file_writer.clear_sync_pool()
 
-
     def test_file_writer_context_manager(self, file_writer: FileWriter, tmp_path):
         """Test the context manager functionality of FileWriter."""
         log_message = "Context manager log message for FileWriter"
@@ -294,7 +288,6 @@ class TestFileWriterOverall:
 
         # After exiting the context, file_paths should be cleared
         assert len(handler.file_paths) == 0
-
 
     @pytest.mark.asyncio
     async def test_file_writer_async_write(self, file_writer: FileWriter, tmp_path):
@@ -319,7 +312,6 @@ class TestFileWriterOverall:
                 assert log_message in content
 
         file_writer.clear_sync_pool()
-
 
     @pytest.mark.asyncio
     async def test_file_writer_async_context_manager(
@@ -394,7 +386,6 @@ class TestFileWriterFunctionality:
                 if rotation_file.exists():
                     rotation_file.unlink()
 
-
     def test_thread_safety(self, file_writer, tmp_path):
         """Test thread safety with concurrent writes."""
         temp_file = tmp_path / "thread_test.log"
@@ -422,7 +413,6 @@ class TestFileWriterFunctionality:
         with open(temp_file, "r") as f:
             content = f.read()
             assert content.count("Thread message") == 500
-
 
     def test_memory_cleanup(self, tmp_path):
         """Test that file handles are properly cleaned up."""
@@ -512,7 +502,9 @@ class TestFileWriterMagicMethods:
 
         # Test __iter__
         for file_path in file_writer:
-            assert isinstance(file_path, Path), "__iter__ method should yield Path objects"
+            assert isinstance(
+                file_path, Path
+            ), "__iter__ method should yield Path objects"
 
         # Test __contains__
         assert (

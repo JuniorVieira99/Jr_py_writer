@@ -58,7 +58,7 @@ jobs:
 
       - name: Run sync bench tests
         run: |
-          uv run pytest test/test_plugins/tests_plugin_statistics.py --bench --benchmark-autosave
+          uv run pytest test/test_plugins/tests_plugin_statistics.py
 
       - name: Post job cleanup
         if: always()

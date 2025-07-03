@@ -12,6 +12,7 @@ from pathlib import Path
 # Exceptions
 # ----------------------------------------------------------------------------------------------
 
+
 class StatisticsAdapterError(Exception):
     """
     Custom exception for StatisticsAdapter errors.
@@ -89,7 +90,9 @@ def make_hashable(obj: Any) -> Any:
         elif isinstance(obj, (str, int, float, bool)):
             return obj
         elif isinstance(obj, dict):
-            return frozenset((make_hashable(k), make_hashable(v)) for k, v in obj.items())
+            return frozenset(
+                (make_hashable(k), make_hashable(v)) for k, v in obj.items()
+            )
         elif isinstance(obj, Path):
             return str(obj)
         elif isinstance(obj, Exception):
@@ -100,9 +103,7 @@ def make_hashable(obj: Any) -> Any:
         raise MakeHashableError(f"Error converting object to hashable type: {e}") from e
 
 
-def make_dict_of_hashable(
-    data: Tuple[FrozenSet]
-) -> Dict[Path, Union[str, Exception]]:
+def make_dict_of_hashable(data: Tuple[FrozenSet]) -> Dict[Path, Union[str, Exception]]:
     """
     Converts a frozen set of data to a dictionary with hashable keys.
 
@@ -116,29 +117,39 @@ def make_dict_of_hashable(
         out = {Path(str(key)): value for key, value in data}
 
         if not out:
-            raise InvalidDataError("Data dictionary is empty. Cannot convert to dictionary of hashable keys.")
+            raise InvalidDataError(
+                "Data dictionary is empty. Cannot convert to dictionary of hashable keys."
+            )
 
         for key, value in out.items():
             if not isinstance(key, Path):
                 raise TypeError(f"Key {key} is not a Path object.")
-            if isinstance(value, tuple) and len(value) == 2 and isinstance(value[0], str):
+            if (
+                isinstance(value, tuple)
+                and len(value) == 2
+                and isinstance(value[0], str)
+            ):
                 # Dynamically create the exception using the class name and message
                 exception_class = globals().get(value[0], Exception)
                 if issubclass(exception_class, Exception):
                     out[key] = exception_class(value[1])
                 else:
-                    out[key] = Exception(f"{value[1]}: Invalid exception class: {value[0]}")
+                    out[key] = Exception(
+                        f"{value[1]}: Invalid exception class: {value[0]}"
+                    )
             elif not isinstance(value, (str, Exception)):
-                raise TypeError(f"Value {value} is not a str or Exception, it is {type(value).__name__}.")
-                
+                raise TypeError(
+                    f"Value {value} is not a str or Exception, it is {type(value).__name__}."
+                )
+
         return out
     except Exception as e:
-        raise DictOfHashableError(f"Error converting data to dictionary of hashable keys: {e}") from e
+        raise DictOfHashableError(
+            f"Error converting data to dictionary of hashable keys: {e}"
+        ) from e
 
 
-def _validate_dict(
-    data: Dict[Path, Union[str, Exception]]
-) -> None:
+def _validate_dict(data: Dict[Path, Union[str, Exception]]) -> None:
     """
     Validates that the provided dictionary has Path keys and values of type str or Exception.
 
@@ -155,21 +166,26 @@ def _validate_dict(
 
     for key, value in data.items():
         if not isinstance(key, Path):
-            raise TypeError(f"Key {key} in data is not a Path object, it is {type(key).__name__}.")
+            raise TypeError(
+                f"Key {key} in data is not a Path object, it is {type(key).__name__}."
+            )
         if not isinstance(value, (str, Exception)):
-            raise TypeError(f"Value {value} in data is not a str or Exception, it is {type(value).__name__}.")
+            raise TypeError(
+                f"Value {value} in data is not a str or Exception, it is {type(value).__name__}."
+            )
 
 
 # ----------------------------------------------------------------------------------------------
 # Classes
 # ----------------------------------------------------------------------------------------------
 
+
 class StatisticsAdapter:
     """
     StatisticsAdapter
     ==========
-    A utility class for generating statistical reports and analyzing data related to file processing. 
-    This class provides methods to calculate success rates, failure rates, total file counts, 
+    A utility class for generating statistical reports and analyzing data related to file processing.
+    This class provides methods to calculate success rates, failure rates, total file counts,
     successful and failed file lists, and total file sizes.
 
     Methods:
@@ -196,7 +212,7 @@ class StatisticsAdapter:
             Get a dictionary with exceptions from the provided data.
         #### get_list_of_exceptions(data: Dict[Path, str | Exception]):
             Get a list of exceptions from the provided data.
-    
+
     Size Methods:
     ------------
     - This will only work if the Path objects in the data dictionary point to actual files on disk.
@@ -214,7 +230,7 @@ class StatisticsAdapter:
 
     ```python
     # Example usage of StatisticsAdapter
-    
+
     # Get report from data
     data = {
         Path("file1.txt"): "File content 1",
@@ -240,7 +256,7 @@ class StatisticsAdapter:
     @staticmethod
     @lru_cache(maxsize=128)
     def _c_get_report(
-        data: Tuple[FrozenSet]
+        data: Tuple[FrozenSet],
     ) -> Dict[str, Union[str, int, float, List[str]]]:
         """
         Generate a report from the provided data.
@@ -270,7 +286,7 @@ class StatisticsAdapter:
         # Get Stats
 
         successful_files = [
-        str(path) for path, v in dict_data.items() if isinstance(v, str)
+            str(path) for path, v in dict_data.items() if isinstance(v, str)
         ]
 
         failed_files = [
@@ -280,7 +296,9 @@ class StatisticsAdapter:
         successful_reads = len(successful_files)
         failed_reads = len(failed_files)
 
-        success_rate = (successful_reads / total_files) * 100  if total_files > 0 else 0.0
+        success_rate = (
+            (successful_reads / total_files) * 100 if total_files > 0 else 0.0
+        )
         failed_rate = (failed_reads / total_files) * 100 if total_files > 0 else 0.0
 
         # Return the report
@@ -291,12 +309,13 @@ class StatisticsAdapter:
             "success_rate": success_rate,
             "failed_rate": failed_rate,
             "successful_files": successful_files,
-            "failed_files": failed_files
+            "failed_files": failed_files,
         }
 
-
     @staticmethod
-    def get_report(data: Dict[Path, str | Exception]) -> Dict[str, Union[str, int, float, List[str]]]:
+    def get_report(
+        data: Dict[Path, str | Exception],
+    ) -> Dict[str, Union[str, int, float, List[str]]]:
         """
         Generate a report from the provided data.
 
@@ -313,7 +332,7 @@ class StatisticsAdapter:
         try:
             # Validate input data
             _validate_dict(data)
-            
+
             # Convert the data to a hashable format
             # This is necessary for caching purposes
             hashable_data = make_hashable(data)
@@ -323,12 +342,9 @@ class StatisticsAdapter:
             return StatisticsAdapter._c_get_report(hashable_data)
         except Exception as e:
             raise ReportGenerationError(f"Error generating report: {e}") from e
-        
 
     @staticmethod
-    def print_report(
-        data: Dict[Path, str | Exception]
-    ) -> None:
+    def print_report(data: Dict[Path, str | Exception]) -> None:
         """
         Print the report to the console or log it using the provided logger.
 
@@ -344,8 +360,8 @@ class StatisticsAdapter:
 
             report = StatisticsAdapter.get_report(data)
 
-            list_of_successful_files = report.get('successful_files', [])
-            list_of_failed_files = report.get('failed_files', [])
+            list_of_successful_files = report.get("successful_files", [])
+            list_of_failed_files = report.get("failed_files", [])
 
             string: str = "\n-- Statistics Report --\n"
 
@@ -363,7 +379,7 @@ class StatisticsAdapter:
                     string += f"  - {file}\n"
             else:
                 string += "No successful files found.\n"
-            
+
             if list_of_failed_files and isinstance(list_of_failed_files, list):
                 string += "Failed Files:\n"
                 for file in list_of_failed_files:
@@ -375,15 +391,12 @@ class StatisticsAdapter:
 
             # Print the report to the console
             print(string)
-            
+
         except Exception as e:
             raise GetError(f"Error printing report: {e}") from e
 
-    
     @staticmethod
-    def get_success_count(
-        data: Dict[Path, str | Exception]
-    ) -> int:
+    def get_success_count(data: Dict[Path, str | Exception]) -> int:
         """
         Get the count of successful reads from the provided data.
 
@@ -398,23 +411,22 @@ class StatisticsAdapter:
             _validate_dict(data)
 
             # get cached report
-            result = StatisticsAdapter.get_report(data).get('successful_reads', 0)
+            result = StatisticsAdapter.get_report(data).get("successful_reads", 0)
 
             # Type assertion
             if isinstance(result, int):
                 return result
-            
-            # Probably wont happen, but just in case         
-            raise TypeError(f"Expected 'successful_reads' to be of type int, but got {type(result).__name__}")
-        
+
+            # Probably wont happen, but just in case
+            raise TypeError(
+                f"Expected 'successful_reads' to be of type int, but got {type(result).__name__}"
+            )
+
         except Exception as e:
             raise GetError(f"Error getting success count: {e}") from e
 
-
     @staticmethod
-    def get_failure_count(
-        data: Dict[Path, str | Exception]
-    ) -> int:
+    def get_failure_count(data: Dict[Path, str | Exception]) -> int:
         """
         Get the count of failed reads from the provided data.
 
@@ -429,23 +441,22 @@ class StatisticsAdapter:
             _validate_dict(data)
 
             # get cached report
-            result = StatisticsAdapter.get_report(data).get('failed_reads', 0)
+            result = StatisticsAdapter.get_report(data).get("failed_reads", 0)
 
             # Type assertion
             if isinstance(result, int):
                 return result
-            
-            # Probably wont happen, but just in case         
-            raise TypeError(f"Expected 'failed_reads' to be of type int, but got {type(result).__name__}")
+
+            # Probably wont happen, but just in case
+            raise TypeError(
+                f"Expected 'failed_reads' to be of type int, but got {type(result).__name__}"
+            )
 
         except Exception as e:
             raise GetError(f"Error getting failure count: {e}") from e
 
-
     @staticmethod
-    def get_success_rate(
-        data: Dict[Path, str | Exception]
-    ) -> float:
+    def get_success_rate(data: Dict[Path, str | Exception]) -> float:
         """
         Get the success rate from the provided data.
 
@@ -460,23 +471,22 @@ class StatisticsAdapter:
             _validate_dict(data)
 
             # get cached report
-            successful_reads = StatisticsAdapter.get_report(data).get('success_rate', 0)
+            successful_reads = StatisticsAdapter.get_report(data).get("success_rate", 0)
 
             # Type assertion
             if isinstance(successful_reads, (float, int)):
                 return successful_reads
 
-            # Probably wont happen, but just in case         
-            raise TypeError(f"Expected 'success_rate' to be of type float or int, but got {type(successful_reads).__name__}")
+            # Probably wont happen, but just in case
+            raise TypeError(
+                f"Expected 'success_rate' to be of type float or int, but got {type(successful_reads).__name__}"
+            )
 
         except Exception as e:
             raise GetError(f"Error getting success rate: {e}") from e
 
-
     @staticmethod
-    def get_failure_rate(
-        data: Dict[Path, str | Exception]
-    ) -> float:
+    def get_failure_rate(data: Dict[Path, str | Exception]) -> float:
         """
         Get the failure rate from the provided data.
 
@@ -491,22 +501,21 @@ class StatisticsAdapter:
             _validate_dict(data)
 
             # get cached report
-            failed_reads = StatisticsAdapter.get_report(data).get('failed_rate', 0)
+            failed_reads = StatisticsAdapter.get_report(data).get("failed_rate", 0)
 
             # Type assertion
             if isinstance(failed_reads, (float, int)):
                 return failed_reads
-            
-            # Probably wont happen, but just in case         
-            raise TypeError(f"Expected 'failed_rate' to be of type float or int, but got {type(failed_reads).__name__}")
+
+            # Probably wont happen, but just in case
+            raise TypeError(
+                f"Expected 'failed_rate' to be of type float or int, but got {type(failed_reads).__name__}"
+            )
         except Exception as e:
             raise GetError(f"Error getting failure rate: {e}") from e
-        
 
     @staticmethod
-    def get_successful_files(
-        data: Dict[Path, str | Exception]
-    ) -> List[str]:
+    def get_successful_files(data: Dict[Path, str | Exception]) -> List[str]:
         """
         Get the list of successful files from the provided data.
 
@@ -521,23 +530,24 @@ class StatisticsAdapter:
             _validate_dict(data)
 
             # get cached report
-            successful_files = StatisticsAdapter.get_report(data).get('successful_files', [])
+            successful_files = StatisticsAdapter.get_report(data).get(
+                "successful_files", []
+            )
 
             # Type assertion
             if isinstance(successful_files, list):
                 return successful_files
-            
-            # Probably wont happen, but just in case         
-            raise TypeError(f"Expected 'successful_files' to be of type list, but got {type(successful_files).__name__}")
+
+            # Probably wont happen, but just in case
+            raise TypeError(
+                f"Expected 'successful_files' to be of type list, but got {type(successful_files).__name__}"
+            )
 
         except Exception as e:
             raise GetError(f"Error getting successful files: {e}") from e
 
-
     @staticmethod
-    def get_failed_files(
-        data: Dict[Path, str | Exception]
-    ) -> List[str]:
+    def get_failed_files(data: Dict[Path, str | Exception]) -> List[str]:
         """
         Get the list of failed files from the provided data.
 
@@ -552,23 +562,22 @@ class StatisticsAdapter:
             _validate_dict(data)
 
             # get cached report
-            failed_files = StatisticsAdapter.get_report(data).get('failed_files', [])
+            failed_files = StatisticsAdapter.get_report(data).get("failed_files", [])
 
             # Type assertion
             if isinstance(failed_files, list):
                 return failed_files
 
-            # Probably wont happen, but just in case         
-            raise TypeError(f"Expected 'failed_files' to be of type list, but got {type(failed_files).__name__}")
-        
+            # Probably wont happen, but just in case
+            raise TypeError(
+                f"Expected 'failed_files' to be of type list, but got {type(failed_files).__name__}"
+            )
+
         except Exception as e:
             raise GetError(f"Error getting failed files: {e}") from e
-        
 
     @staticmethod
-    def get_count_total_files(
-        data: Dict[Path, str | Exception]
-    ) -> int:
+    def get_count_total_files(data: Dict[Path, str | Exception]) -> int:
         """
         Get the total number of files in the provided data.
 
@@ -583,21 +592,22 @@ class StatisticsAdapter:
             _validate_dict(data)
 
             # get cached report
-            total_files = StatisticsAdapter.get_report(data).get('total_files', 0)
+            total_files = StatisticsAdapter.get_report(data).get("total_files", 0)
 
             # Type assertion
             if isinstance(total_files, int):
                 return total_files
-            
-            # Probably wont happen, but just in case         
-            raise TypeError(f"Expected 'total_files' to be of type int, but got {type(total_files).__name__}")
+
+            # Probably wont happen, but just in case
+            raise TypeError(
+                f"Expected 'total_files' to be of type int, but got {type(total_files).__name__}"
+            )
         except Exception as e:
             raise GetError(f"Error getting total file count: {e}") from e
 
-
     @staticmethod
     def get_dict_with_exceptions(
-        data: Dict[Path, str | Exception]
+        data: Dict[Path, str | Exception],
     ) -> Dict[Path, Exception]:
         """
         Get a dictionary with exceptions from the provided data.
@@ -620,11 +630,8 @@ class StatisticsAdapter:
         except Exception as e:
             raise GetError(f"Error getting dictionary with exceptions: {e}") from e
 
-
     @staticmethod
-    def get_list_of_exceptions(
-        data: Dict[Path, str | Exception]
-    ) -> List[Exception]:
+    def get_list_of_exceptions(data: Dict[Path, str | Exception]) -> List[Exception]:
         """
         Get a list of exceptions from the provided data.
 
@@ -646,11 +653,8 @@ class StatisticsAdapter:
         except Exception as e:
             raise GetError(f"Error getting list of exceptions: {e}") from e
 
-    
     @staticmethod
-    def get_total_size_of_files(
-        data: Dict[Path, str | Exception]
-    ) -> int:
+    def get_total_size_of_files(data: Dict[Path, str | Exception]) -> int:
         """
         Get the total size of files in the provided data.
 
@@ -664,17 +668,20 @@ class StatisticsAdapter:
             # Validate input data
             _validate_dict(data)
 
-            total_size = sum(path.stat().st_size for path in data if isinstance(path, Path) and path.exists())
+            total_size = sum(
+                path.stat().st_size
+                for path in data
+                if isinstance(path, Path) and path.exists()
+            )
 
             return total_size
 
         except Exception as e:
             raise GetError(f"Error getting total size of files: {e}") from e
 
-
     @staticmethod
     def get_largest_file_size(
-        data: Dict[Path, str | Exception]
+        data: Dict[Path, str | Exception],
     ) -> Tuple[Path | None, int]:
         """
         Get the largest file in the provided data.
@@ -692,7 +699,7 @@ class StatisticsAdapter:
             largest_file = max(
                 (path for path in data if isinstance(path, Path) and path.exists()),
                 key=lambda p: p.stat().st_size,
-                default=None
+                default=None,
             )
 
             if largest_file is None:
@@ -703,10 +710,9 @@ class StatisticsAdapter:
         except Exception as e:
             raise GetError(f"Error getting largest file: {e}") from e
 
-
     @staticmethod
     def get_smallest_file_size(
-        data: Dict[Path, str | Exception]
+        data: Dict[Path, str | Exception],
     ) -> Tuple[Path | None, int]:
         """
         Get the smallest file in the provided data.
@@ -724,7 +730,7 @@ class StatisticsAdapter:
             smallest_file = min(
                 (path for path in data if isinstance(path, Path) and path.exists()),
                 key=lambda p: p.stat().st_size,
-                default=None
+                default=None,
             )
 
             if smallest_file is None:
@@ -735,11 +741,8 @@ class StatisticsAdapter:
         except Exception as e:
             raise GetError(f"Error getting smallest file: {e}") from e
 
-
     @staticmethod
-    def get_average_file_size(
-        data: Dict[Path, str | Exception]
-    ) -> float:
+    def get_average_file_size(data: Dict[Path, str | Exception]) -> float:
         """
         Get the average file size in the provided data.
 
@@ -763,4 +766,3 @@ class StatisticsAdapter:
 
         except Exception as e:
             raise GetError(f"Error getting average file size: {e}") from e
-
