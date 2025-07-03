@@ -314,7 +314,6 @@ class GCManager:
 # Function Definitions
 # ---------------------------------------------------------------------------------------------
 
-
 def _calculate_batch_size(data: Union[List, Tuple, Set], batch_size: int) -> int:
     """
     _calculate_batch_size

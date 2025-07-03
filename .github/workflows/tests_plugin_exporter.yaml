@@ -1,4 +1,4 @@
-name: tests_bench_async
+name: tests_plugin_exporter
 
 on:
   workflow_dispatch:
@@ -58,7 +58,7 @@ jobs:
 
       - name: Run sync bench tests
         run: |
-          uv run pytest test/test_bench_async_file_handler.py --benchmark-enable
+          uv run pytest test/test_plugins/test_plugin_exporter.py --bench --benchmark-autosave
 
       - name: Post job cleanup
         if: always()

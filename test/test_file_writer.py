@@ -16,11 +16,11 @@ import pytest
 import psutil
 
 # Local imports
-from jr_py_writer.classes.file_writer import FileWriter
-from jr_py_writer.utils.module_enums import LogWriteMode
+from jr_file_handler.classes.file_writer import FileWriter
+from jr_file_handler.utils.module_enums import LogWriteMode
 
 # Exceptions
-from jr_py_writer.exceptions.exceptions_file_writer import (
+from jr_file_handler.exceptions.exceptions_file_writer import (
     FileWriterConstructionError,
     FileWriterSettingsError,
     FileWriterWriteError,
@@ -65,16 +65,16 @@ EDGE_INT = [
     "1.0",
     [],
     {},
-    tuple(),
+    (),
     set(),
     None,
     b"byte",
 ]
 
-EDGE_FLOAT = [-1.0, "1.0", [], {}, tuple(), set(), None, b"byte"]
+EDGE_FLOAT = [-1.0, "1.0", [], {}, (), set(), None, b"byte"]
 
 EDGE_PATHS = [
-    tuple(),
+    (),
     [],
     {},
     set(),
@@ -86,7 +86,7 @@ EDGE_PATHS = [
     "1.0",
 ]
 
-EDGE_LOG = [55, 1.0, -1.0, [], {}, tuple(), set(), None]
+EDGE_LOG = [55, 1.0, -1.0, [], {}, (), set(), None]
 
 BATCH_TEST_CASES: Final[List[int]] = [100, 300, 500, 1000, 2000]
 
@@ -95,701 +95,251 @@ BATCH_TEST_CASES: Final[List[int]] = [100, 300, 500, 1000, 2000]
 # ----------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("edge_value", EDGE_PATHS)
-def test_file_writer_edge_constructor_paths(edge_value):
-    """Test edge cases for FileWriter constructor."""
-    # Test with invalid file_paths
-    with pytest.raises(FileWriterConstructionError):
-        FileWriter(
-            file_paths=edge_value, retry_limit=0, retry_delay=0.0, backoff_factor=0.0
-        )
+class TestFileWriterEdge:
+    """
+    Test edge cases for FileWriter.
+    This class contains tests for the FileWriter class to ensure it handles edge cases correctly.
+    It includes tests for constructor parameters, setters, and methods.
+
+    Tests:
+    -------
+    - Edge cases for constructor parameters
+    - Edge cases for setters
+    - Edge cases for the write method
+    - Edge cases for the async_write method
+    - Edge cases for the context manager functionality
+    """
+
+    @pytest.mark.parametrize("edge_value", EDGE_PATHS)
+    def test_file_writer_edge_constructor_paths(self, edge_value):
+        """Test edge cases for FileWriter constructor."""
+        # Test with invalid file_paths
+        with pytest.raises(FileWriterConstructionError):
+            FileWriter(
+                file_paths=edge_value, retry_limit=0, retry_delay=0.0, backoff_factor=0.0
+            )
 
 
-@pytest.mark.parametrize("edge_value", EDGE_INT)
-def test_file_writer_edge_constructor_int(tmp_path, edge_value):
-    """Test edge cases for FileWriter constructor."""
-    temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
-    # Test with invalid retry_limit
-    with pytest.raises(FileWriterConstructionError):
-        FileWriter(temp_files, retry_limit=edge_value)
+    @pytest.mark.parametrize("edge_value", EDGE_INT)
+    def test_file_writer_edge_constructor_int(self, tmp_path, edge_value):
+        """Test edge cases for FileWriter constructor."""
+        temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
+        # Test with invalid retry_limit
+        with pytest.raises(FileWriterConstructionError):
+            FileWriter(temp_files, retry_limit=edge_value)
 
-    # Test with invalid max_file_size
-    with pytest.raises(FileWriterConstructionError):
-        FileWriter(temp_files, max_file_size=edge_value)
+        # Test with invalid max_file_size
+        with pytest.raises(FileWriterConstructionError):
+            FileWriter(temp_files, max_file_size=edge_value)
 
-    # Test with invalid max_rotation
-    with pytest.raises(FileWriterConstructionError):
-        FileWriter(temp_files, max_rotation=edge_value)
-
-
-@pytest.mark.parametrize("edge_value", EDGE_FLOAT)
-def test_file_writer_edge_constructor_float(tmp_path, edge_value):
-    """Test edge cases for FileWriter constructor."""
-    temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
-
-    # Test with invalid retry_delay
-    with pytest.raises(FileWriterConstructionError):
-        FileWriter(temp_files, retry_delay=edge_value)
-
-    # Test with invalid backoff_factor
-    with pytest.raises(FileWriterConstructionError):
-        FileWriter(temp_files, backoff_factor=edge_value)
+        # Test with invalid max_rotation
+        with pytest.raises(FileWriterConstructionError):
+            FileWriter(temp_files, max_rotation=edge_value)
 
 
-def test_file_writer_edge_setters(file_writer: FileWriter):
-    """Test edge cases for FileWriter."""
+    @pytest.mark.parametrize("edge_value", EDGE_FLOAT)
+    def test_file_writer_edge_constructor_float(self, tmp_path, edge_value):
+        """Test edge cases for FileWriter constructor."""
+        temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
 
-    # Test with empty file_paths
-    with pytest.raises(FileWriterSettingsError):
-        file_writer.file_paths = []
+        # Test with invalid retry_delay
+        with pytest.raises(FileWriterConstructionError):
+            FileWriter(temp_files, retry_delay=edge_value)
 
-    # Test with invalid retry_limit
-    with pytest.raises(FileWriterSettingsError):
-        file_writer.retry_limit = -1
-
-    # Test with invalid retry_delay
-    with pytest.raises(FileWriterSettingsError):
-        file_writer.retry_delay = -1.0
-
-    # Test with invalid backoff_factor
-    with pytest.raises(FileWriterSettingsError):
-        file_writer.backoff_factor = -1.0
-
-    # Test with invalid max_file_size
-    with pytest.raises(FileWriterSettingsError):
-        file_writer.max_file_size = -1
-
-    # Test with invalid max_rotation
-    with pytest.raises(FileWriterSettingsError):
-        file_writer.max_rotation = -1
+        # Test with invalid backoff_factor
+        with pytest.raises(FileWriterConstructionError):
+            FileWriter(temp_files, backoff_factor=edge_value)
 
 
-@pytest.mark.parametrize("edge_value", EDGE_LOG)
-def test_file_writer_edge_log(file_writer: FileWriter, edge_value):
-    """Test edge cases for FileWriter log method."""
+    def test_file_writer_edge_setters(self, file_writer: FileWriter):
+        """Test edge cases for FileWriter."""
 
-    # Test with invalid log message type
-    with pytest.raises(FileWriterWriteError):
-        file_writer.write(edge_value)
+        # Test with empty file_paths
+        with pytest.raises(FileWriterSettingsError):
+            file_writer.file_paths = []
+
+        # Test with invalid retry_limit
+        with pytest.raises(FileWriterSettingsError):
+            file_writer.retry_limit = -1
+
+        # Test with invalid retry_delay
+        with pytest.raises(FileWriterSettingsError):
+            file_writer.retry_delay = -1.0
+
+        # Test with invalid backoff_factor
+        with pytest.raises(FileWriterSettingsError):
+            file_writer.backoff_factor = -1.0
+
+        # Test with invalid max_file_size
+        with pytest.raises(FileWriterSettingsError):
+            file_writer.max_file_size = -1
+
+        # Test with invalid max_rotation
+        with pytest.raises(FileWriterSettingsError):
+            file_writer.max_rotation = -1
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("edge_value", EDGE_LOG)
-async def test_file_writer_edge_async_log(
-    file_writer: FileWriter, edge_value
-):
-    """Test edge cases for FileWriter async log method."""
-    # Test with invalid log message type
-    with pytest.raises(FileWriterAsyncWriteError):
-        await file_writer.async_write(edge_value)
+    @pytest.mark.parametrize("edge_value", EDGE_LOG)
+    def test_file_writer_edge_message(self,file_writer: FileWriter, edge_value):
+        """Test edge cases for FileWriter log method."""
+
+        # Test with invalid log message type
+        with pytest.raises(FileWriterWriteError):
+            file_writer.write(edge_value)
+
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("edge_value", EDGE_LOG)
+    async def test_file_writer_edge_async_message(
+        self, file_writer: FileWriter, edge_value
+    ):
+        """Test edge cases for FileWriter async log method."""
+        # Test with invalid log message type
+        with pytest.raises(FileWriterAsyncWriteError):
+            await file_writer.async_write(edge_value)
 
 
 # ----------------------------------------------------------------------------------------------
-# Tests
+# Overall Tests
 # ----------------------------------------------------------------------------------------------
 
+class TestFileWriterOverall:
+    """
+    Test overall functionality of FileWriter.
+    This class contains tests for the FileWriter class to ensure it works as expected.
+    It includes tests for initialization, setters, methods, and context manager functionality.
 
-def test_file_writer_init(file_writer: FileWriter):
-    """Test the initialization of FileWriter."""
-    assert len(file_writer.file_paths) == 2
-    assert file_writer.write_mode == "a"
-    assert file_writer.retry_limit == 0
-    assert file_writer.retry_delay == pytest.approx(0.0)
-    assert file_writer.backoff_factor == pytest.approx(0.0)
-    assert file_writer.max_file_size == 10 * 1024 * 1024  # 10 MB
-    assert file_writer.max_rotation == 5
+    Tests:
+    -------
+    - Initialization of FileWriter
+    - Setters for file_paths, write_mode, retry_limit, retry_delay, backoff_factor
+    - Write method
+    - Async write method
+    - Context manager functionality
+    """
 
-
-def test_file_writer_setters(file_writer: FileWriter):
-    """Test the setters of FileWriter."""
-    # Test setting file_paths
-    new_paths = [Path("new_test_1.log"), Path("new_test_2.log")]
-    file_writer.file_paths = new_paths
-
-    assert file_writer.file_paths == new_paths
-
-    # Test setting write_mode
-    file_writer.write_mode = LogWriteMode.WRITE_READ
-    assert file_writer.write_mode == LogWriteMode.WRITE_READ
-
-    # Test setting retry_limit
-    file_writer.retry_limit = 5
-    assert file_writer.retry_limit == 5
-
-    # Test setting retry_delay
-    file_writer.retry_delay = 1.0
-    assert file_writer.retry_delay == pytest.approx(1.0)
-
-    # Test setting backoff_factor
-    file_writer.backoff_factor = 0.5
-    assert file_writer.backoff_factor == pytest.approx(0.5)
+    def test_file_writer_init(self, file_writer: FileWriter):
+        """Test the initialization of FileWriter."""
+        assert len(file_writer.file_paths) == 2
+        assert file_writer.write_mode == "a"
+        assert file_writer.retry_limit == 0
+        assert file_writer.retry_delay == pytest.approx(0.0)
+        assert file_writer.backoff_factor == pytest.approx(0.0)
+        assert file_writer.max_file_size == 10 * 1024 * 1024  # 10 MB
+        assert file_writer.max_rotation == 5
 
 
-def test_file_writer_write(file_writer: FileWriter, tmp_path):
-    """Test the log method of FileWriter."""
-    log_message = "Test log message for FileWriter"
+    def test_file_writer_setters(self, file_writer: FileWriter):
+        """Test the setters of FileWriter."""
+        # Test setting file_paths
+        new_paths = [Path("new_test_1.log"), Path("new_test_2.log")]
+        file_writer.file_paths = new_paths
 
-    # Set up temporary files for logging
-    temp_file_1 = tmp_path / "test_1.log"
-    temp_file_2 = tmp_path / "test_2.log"
-    file_writer.file_paths = [temp_file_1, temp_file_2]
+        assert file_writer.file_paths == new_paths
 
-    # Call the log method
-    file_writer.write(log_message)
+        # Test setting write_mode
+        file_writer.write_mode = LogWriteMode.WRITE_READ
+        assert file_writer.write_mode == LogWriteMode.WRITE_READ
 
-    # Force the file handler to flush the buffer
-    file_writer.buffer_force_flush()
+        # Test setting retry_limit
+        file_writer.retry_limit = 5
+        assert file_writer.retry_limit == 5
 
-    # Check if the log message is written to the file
-    for file_path in file_writer.file_paths:
-        with open(file_path, "r") as f:
+        # Test setting retry_delay
+        file_writer.retry_delay = 1.0
+        assert file_writer.retry_delay == pytest.approx(1.0)
+
+        # Test setting backoff_factor
+        file_writer.backoff_factor = 0.5
+        assert file_writer.backoff_factor == pytest.approx(0.5)
+
+
+    def test_file_writer_write(self, file_writer: FileWriter, tmp_path):
+        """Test the log method of FileWriter."""
+        log_message = "Test log message for FileWriter"
+
+        # Set up temporary files for logging
+        temp_file_1 = tmp_path / "test_1.log"
+        temp_file_2 = tmp_path / "test_2.log"
+        file_writer.file_paths = [temp_file_1, temp_file_2]
+
+        # Call the log method
+        file_writer.write(log_message)
+
+        # Force the file handler to flush the buffer
+        file_writer.buffer_force_flush()
+
+        # Check if the log message is written to the file
+        for file_path in file_writer.file_paths:
+            with open(file_path, "r") as f:
+                content = f.read()
+                assert log_message in content
+
+        file_writer.clear_sync_pool()
+
+
+    def test_file_writer_context_manager(self, file_writer: FileWriter, tmp_path):
+        """Test the context manager functionality of FileWriter."""
+        log_message = "Context manager log message for FileWriter"
+        temp_file = tmp_path / "context_test.log"
+
+        with file_writer as handler:
+            handler.file_paths = [temp_file]
+            handler.write(log_message)
+
+        # Check if the log message is written to the file
+        with open(temp_file, "r") as f:
             content = f.read()
             assert log_message in content
 
-    file_writer.clear_sync_pool()
+        # After exiting the context, file_paths should be cleared
+        assert len(handler.file_paths) == 0
 
 
-def test_file_writer_context_manager(file_writer: FileWriter, tmp_path):
-    """Test the context manager functionality of FileWriter."""
-    log_message = "Context manager log message for FileWriter"
-    temp_file = tmp_path / "context_test.log"
+    @pytest.mark.asyncio
+    async def test_file_writer_async_write(self, file_writer: FileWriter, tmp_path):
+        """Test the async log method of FileWriter."""
+        log_message = "Async log message for FileWriter"
 
-    with file_writer as handler:
-        handler.file_paths = [temp_file]
-        handler.write(log_message)
+        # Set up temporary files for logging
+        temp_file_1 = tmp_path / "test_1.log"
+        temp_file_2 = tmp_path / "test_2.log"
+        file_writer.file_paths = [temp_file_1, temp_file_2]
 
-    # Check if the log message is written to the file
-    with open(temp_file, "r") as f:
-        content = f.read()
-        assert log_message in content
+        # Call the async log method
+        await file_writer.async_write(log_message)
 
-    # After exiting the context, file_paths should be cleared
-    assert len(handler.file_paths) == 0
+        # Force the file handler to flush the buffer
+        file_writer.buffer_force_flush()
+
+        # Check if the log message is written to the file
+        for file_path in file_writer.file_paths:
+            with open(file_path, "r") as f:
+                content = f.read()
+                assert log_message in content
+
+        file_writer.clear_sync_pool()
 
 
-@pytest.mark.asyncio
-async def test_file_writer_async_write(file_writer: FileWriter, tmp_path):
-    """Test the async log method of FileWriter."""
-    log_message = "Async log message for FileWriter"
+    @pytest.mark.asyncio
+    async def test_file_writer_async_context_manager(
+        self, file_writer: FileWriter, tmp_path
+    ):
+        """Test the async context manager functionality of FileWriter."""
+        log_message = "Async context manager log message for FileWriter"
+        temp_file = tmp_path / "async_context_test.log"
 
-    # Set up temporary files for logging
-    temp_file_1 = tmp_path / "test_1.log"
-    temp_file_2 = tmp_path / "test_2.log"
-    file_writer.file_paths = [temp_file_1, temp_file_2]
+        async with file_writer as handler:
+            handler.file_paths = [temp_file]
+            await handler.async_write(log_message)
 
-    # Call the async log method
-    await file_writer.async_write(log_message)
-
-    # Force the file handler to flush the buffer
-    file_writer.buffer_force_flush()
-
-    # Check if the log message is written to the file
-    for file_path in file_writer.file_paths:
-        with open(file_path, "r") as f:
+        # Check if the log message is written to the file
+        with open(temp_file, "r") as f:
             content = f.read()
             assert log_message in content
 
-    file_writer.clear_sync_pool()
-
-
-@pytest.mark.asyncio
-async def test_file_writer_async_context_manager(
-    file_writer: FileWriter, tmp_path
-):
-    """Test the async context manager functionality of FileWriter."""
-    log_message = "Async context manager log message for FileWriter"
-    temp_file = tmp_path / "async_context_test.log"
-
-    async with file_writer as handler:
-        handler.file_paths = [temp_file]
-        await handler.async_write(log_message)
-
-    # Check if the log message is written to the file
-    with open(temp_file, "r") as f:
-        content = f.read()
-        assert log_message in content
-
-    # After exiting the context, file_paths should be cleared
-    assert len(handler.file_paths) == 0
-
-
-# ----------------------------------------------------------------------------------------------
-# Performance Tests
-# ----------------------------------------------------------------------------------------------
-
-# Sync Performance Tests
-
-
-@pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-def test_file_writer_log_batches(
-    file_writer: FileWriter, tmp_path, batch_size: int
-):
-    """
-    Test the log_batches method of FileWriter.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - Time taken to log 100 messages: 0.06 seconds.
-    - Time taken to log 300 messages: 0.18 seconds.
-    - Time taken to log 500 messages: 0.35 seconds.
-    - Time taken to log 1000 messages: 0.434 seconds.
-    - Time taken to log 2000 messages: 0.804 seconds.
-    """
-    log_message: str = "Batch log message for FileWriter"
-
-    # Make paths
-    temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
-    file_writer.file_paths = temp_files
-
-    # Set the write mode to append
-    file_writer.write_mode = LogWriteMode.APPEND
-
-    start_time: float = time.time()
-    # Call the log_batches method
-    file_writer.write(log_message)
-    end_time: float = time.time()
-    elapsed_time: float = end_time - start_time
-
-    # Force the file handler to flush the buffer
-    file_writer.buffer_force_flush()
-
-    print(f"Time taken to log {batch_size} messages: {elapsed_time:.3f} seconds")
-
-    # Check if the log message is written to the files
-    for file_path in file_writer.file_paths:
-        with open(file_path, "r") as f:
-            content = f.read()
-            assert log_message in content
-
-    file_writer.clear_sync_pool()
-
-
-@pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-def test_file_writer_cm_log_batches(
-    file_writer: FileWriter, tmp_path, batch_size: int
-):
-    """
-    Test the context manager log_batches method of FileWriter.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - Time taken to log 100 messages: 0.09 seconds.
-    - Time taken to log 300 messages: 0.22 seconds.
-    - Time taken to log 500 messages: 0.39 seconds.
-    - Time taken to log 1000 messages: 0.76 seconds.
-    - Time taken to log 2000 messages: 1.39 seconds.
-    """
-    log_message: str = "Context Manager Batch log message for FileWriter"
-
-    # Make paths
-    temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
-    file_writer.file_paths = temp_files
-
-    # Set the write mode to append
-    file_writer.write_mode = LogWriteMode.APPEND
-
-    start_time: float = time.time()
-
-    # Use context manager to log batches
-    with file_writer as handler:
-        handler.write(log_message)
-
-    end_time: float = time.time()
-    elapsed_time: float = end_time - start_time
-    print(
-        f"Time taken to log {batch_size} messages in context manager: {elapsed_time:.3f} seconds"
-    )
-
-    # Check if the log message is written to the files
-    for file_path in file_writer.file_paths:
-        with open(file_path, "r") as f:
-            content = f.read()
-            assert log_message in content
-
-    assert (
-        len(file_writer.file_paths) == 0
-    ), "File paths should be cleared after context manager exit"
-
-
-# Sync With no Flush Performance Tests
-
-
-@pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-def test_file_writer_log_batches_no_flush(
-    file_writer: FileWriter, tmp_path, batch_size: int
-):
-    """
-    Test the log_batches method of FileWriter - WITHOUT auto-flush.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - Time taken to log 100 messages: 0.03 seconds.
-    - Time taken to log 300 messages: 0.06 seconds.
-    - Time taken to log 500 messages: 0.13 seconds.
-    - Time taken to log 1000 messages: 0.19 seconds.
-    - Time taken to log 2000 messages: 0.37 seconds.
-    """
-    log_message: str = "Batch log message for FileWriter"
-
-    # Make paths
-    temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
-    file_writer.file_paths = temp_files
-
-    # Set flush to false
-    file_writer.use_write_flush = False
-
-    # Set the write mode to append
-    file_writer.write_mode = LogWriteMode.APPEND
-
-    # Call the log_batches method
-    file_writer.write(log_message)
-
-    start_time: float = time.time()
-
-    # Force the file handler to flush the buffer
-    file_writer.buffer_force_flush()
-
-    end_time: float = time.time()
-    elapsed_time: float = end_time - start_time
-
-    print(f"Time taken to log {batch_size} messages: {elapsed_time:.3f} seconds")
-
-    # Check if the log message is written to the files
-    for file_path in file_writer.file_paths:
-        with open(file_path, "r") as f:
-            content = f.read()
-            assert log_message in content
-
-    file_writer.clear_sync_pool()
-
-
-@pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-def test_file_writer_cm_log_batches_no_flush(
-    file_writer: FileWriter, tmp_path, batch_size: int
-):
-    """
-    Test the context manager log_batches method of FileWriter - WITHOUT auto-flush.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - Time taken to log 100 messages: 0.08 seconds.
-    - Time taken to log 300 messages: 0.27 seconds.
-    - Time taken to log 500 messages: 0.51 seconds.
-    - Time taken to log 1000 messages: 0.98 seconds.
-    - Time taken to log 2000 messages: 1.62 seconds.
-    """
-    log_message: str = "Context Manager Batch log message for FileWriter"
-
-    # Make paths
-    temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
-    file_writer.file_paths = temp_files
-
-    # Set flush to false
-    file_writer.use_write_flush = False
-
-    # Set the write mode to append
-    file_writer.write_mode = LogWriteMode.APPEND
-
-    start_time: float = time.time()
-
-    # Use context manager to log batches
-    with file_writer as handler:
-        handler.write(log_message)
-
-    end_time: float = time.time()
-    elapsed_time: float = end_time - start_time
-    print(
-        f"Time taken to log {batch_size} messages in context manager: {elapsed_time:.3f} seconds"
-    )
-
-    # Check if the log message is written to the files
-    for file_path in file_writer.file_paths:
-        with open(file_path, "r") as f:
-            content = f.read()
-            assert log_message in content
-
-    assert (
-        len(file_writer.file_paths) == 0
-    ), "File paths should be cleared after context manager exit"
-
-
-# Async Performance Tests
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-async def test_file_writer_log_async_batches(
-    file_writer: FileWriter, tmp_path, batch_size
-):
-    """
-    Test the async log_batches method of FileWriter.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - Time taken to log 100 messages: 0.03 seconds.
-    - Time taken to log 300 messages: 0.08 seconds.
-    - Time taken to log 500 messages: 0.11 seconds.
-    - Time taken to log 1000 messages: 0.20 seconds.
-    - Time taken to log 2000 messages: 0.39 seconds.
-    """
-    log_message: str = "Async Batch log message for FileWriter"
-
-    # Close the sync pool before starting async operations
-    file_writer.clear_sync_pool()
-
-    # Make paths
-    temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
-    file_writer.file_paths = temp_files
-
-    # Set the write mode to append
-    file_writer.write_mode = LogWriteMode.APPEND
-
-    # Call the async log_batches method
-    await file_writer.async_write(log_message)
-
-    start_time: float = time.time()
-
-    # Force the file handler to flush the buffer
-    file_writer.buffer_force_flush()
-
-    end_time: float = time.time()
-    elapsed_time: float = end_time - start_time
-    print(f"Async time taken to log {batch_size} messages: {elapsed_time:.2f} seconds")
-
-    # Check if the log message is written to the files
-    for file_path in file_writer.file_paths:
-        with open(file_path, "r") as f:
-            content = f.read()
-            assert log_message in content
-
-    # After flushing, the buffer should be empty
-    file_writer.clear_all()
-    assert (
-        file_writer.get_buffer_size == 0
-    ), "Buffer should be empty after flush"
-
-    print(f"Async log completed for {batch_size}")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-async def test_file_writer_cm_log_async_batches(
-    file_writer: FileWriter, tmp_path, batch_size
-):
-    """
-    Test the async context manager log_batches method of FileWriter.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - Time taken to log 100 messages: 0.11 seconds.
-    - Time taken to log 300 messages: 0.28 seconds.
-    - Time taken to log 500 messages: 0.48 seconds.
-    - Time taken to log 1000 messages: 0.83 seconds.
-    - Time taken to log 2000 messages: 1.66 seconds.
-    """
-    log_message: str = "Async Context Manager Batch log message for FileWriter"
-
-    # Close the sync pool before starting async operations
-    file_writer.clear_sync_pool()
-
-    # Make paths
-    temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
-    file_writer.file_paths = temp_files
-
-    # Set the write mode to append
-    file_writer.write_mode = LogWriteMode.APPEND
-
-    start_time: float = time.time()
-
-    # Use async context manager to log batches
-    async with file_writer as handler:
-        await handler.async_write(log_message)
-
-    end_time: float = time.time()
-    elapsed_time: float = end_time - start_time
-    print(
-        f"Async time taken to log {batch_size} messages in context manager: {elapsed_time:.2f} seconds"
-    )
-
-    # Check if the log message is written to the files
-    for file_path in file_writer.file_paths:
-        with open(file_path, "r") as f:
-            content = f.read()
-            assert log_message in content
-
-    # After exiting the context, file_paths should be cleared
-    file_writer.clear_all()
-    assert (
-        len(file_writer.file_paths) == 0
-    ), "File paths should be cleared after context manager exit"
-
-
-# Async With no Flush Performance Tests
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-async def test_file_writer_log_async_batches_no_flush(
-    file_writer: FileWriter, tmp_path, batch_size
-):
-    """
-    Test the async log_batches method of FileWriter - WITHOUT auto-flush.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - Time taken to log 100 messages: 0.02 seconds.
-    - Time taken to log 300 messages: 0.06 seconds.
-    - Time taken to log 500 messages: 0.11 seconds.
-    - Time taken to log 1000 messages: 0.24 seconds.
-    - Time taken to log 2000 messages: 0.40 seconds.
-    """
-    log_message: str = "Async Batch log message for FileWriter"
-
-    # Close the sync pool before starting async operations
-    file_writer.clear_sync_pool()
-
-    # Make paths
-    temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
-    file_writer.file_paths = temp_files
-
-    # Set flush to false
-    file_writer.use_write_flush = False
-
-    # Set the write mode to append
-    file_writer.write_mode = LogWriteMode.APPEND
-
-    # Call the async log_batches method
-    await file_writer.async_write(log_message)
-
-    start_time: float = time.time()
-
-    # Force the file handler to flush the buffer
-    file_writer.buffer_force_flush()
-
-    end_time: float = time.time()
-    elapsed_time: float = end_time - start_time
-    print(f"Async time taken to log {batch_size} messages: {elapsed_time:.2f} seconds")
-
-    # Check if the log message is written to the files
-    for file_path in file_writer.file_paths:
-        with open(file_path, "r") as f:
-            content = f.read()
-            assert log_message in content
-
-    file_writer.clear_all()
-    assert (
-        file_writer.get_buffer_size == 0
-    ), "Buffer should be empty after flush"
-    assert (
-        len(file_writer.file_paths) == 0
-    ), "File paths should be cleared after async log"
-
-    print(f"Async log completed for {batch_size}")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-async def test_file_writer_cm_log_async_batches_no_flush(
-    file_writer: FileWriter, tmp_path, batch_size
-):
-    """
-    Test the async context manager log_batches method of FileWriter - WITHOUT auto-flush.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - Time taken to log 100 messages: 0.09 seconds.
-    - Time taken to log 300 messages: 0.33 seconds.
-    - Time taken to log 500 messages: 0.46 seconds.
-    - Time taken to log 1000 messages: 0.89 seconds.
-    - Time taken to log 2000 messages: 1.45 seconds.
-    """
-    log_message: str = "Async Context Manager Batch log message for FileWriter"
-
-    # Close the sync pool before starting async operations
-    file_writer.clear_sync_pool()
-
-    # Make paths
-    temp_files: List[Path] = temporary_file_writer(batch_size, tmp_path)
-    file_writer.file_paths = temp_files
-
-    # Set flush to false
-    file_writer.use_write_flush = False
-
-    # Set the write mode to append
-    file_writer.write_mode = LogWriteMode.APPEND
-
-    start_time: float = time.time()
-
-    # Use async context manager to log batches
-    async with file_writer as handler:
-        await handler.async_write(log_message)
-
-    end_time: float = time.time()
-    elapsed_time: float = end_time - start_time
-    print(
-        f"Async time taken to log {batch_size} messages in context manager: {elapsed_time:.2f} seconds"
-    )
-
-    # Check if the log message is written to the files
-    for file_path in file_writer.file_paths:
-        with open(file_path, "r") as f:
-            content = f.read()
-            assert log_message in content
-
-    assert (
-        len(file_writer.file_paths) == 0
-    ), "File paths should be cleared after context manager exit"
-    assert (
-        file_writer.get_buffer_size == 0
-    ), "Buffer should be empty after async log"
+        # After exiting the context, file_paths should be cleared
+        assert len(handler.file_paths) == 0
 
 
 # ----------------------------------------------------------------------------------------------
@@ -797,361 +347,113 @@ async def test_file_writer_cm_log_async_batches_no_flush(
 # ----------------------------------------------------------------------------------------------
 
 
-def test_file_rotation(file_writer, tmp_path):
-    """Test file rotation when max size is exceeded."""
+class TestFileWriterFunctionality:
+    """
+    Test the functionality of FileWriter.
+    This class contains tests for the FileWriter class to ensure it works as expected.
+    It includes tests for file rotation, thread safety, and memory cleanup.
 
-    # Set Logger
-    file_writer.logger.setLevel("DEBUG")
+    Tests:
+    -------
+    - File rotation when max size is exceeded
+    - Thread safety with concurrent writes
+    - Memory cleanup after usage
+    """
 
-    # Create a temporary log file
-    log_file = tmp_path / "small.log"
-    file_writer.file_paths = [log_file]
-    file_writer.max_file_size = 5  # Very small for testing
-    file_writer.max_rotation = 3  # Limit to 2 rotations
+    def test_file_rotation(self, file_writer, tmp_path):
+        """Test file rotation when max size is exceeded."""
 
-    # Write enough to trigger rotation
-    for i in range(700):
-        file_writer.write(f"Long message {i} " * 10)
+        # Set Logger
+        file_writer.logger.setLevel("DEBUG")
 
-    # Force the file handler to flush the buffer
-    file_writer.buffer_force_flush()
+        # Create a temporary log file
+        log_file = tmp_path / "small.log"
+        file_writer.file_paths = [log_file]
+        file_writer.max_file_size = 5  # Very small for testing
+        file_writer.max_rotation = 3  # Limit to 2 rotations
 
-    try:
-        # Check if rotation files exist in the tmp_path directory
-        rotation_file_1 = tmp_path / "small_1.log"
-        rotation_file_2 = tmp_path / "small_2.log"
+        # Write enough to trigger rotation
+        for i in range(700):
+            file_writer.write(f"Long message {i} " * 10)
+
+        # Force the file handler to flush the buffer
+        file_writer.buffer_force_flush()
+
+        try:
+            # Check if rotation files exist in the tmp_path directory
+            rotation_file_1 = tmp_path / "small_1.log"
+            rotation_file_2 = tmp_path / "small_2.log"
+            assert (
+                rotation_file_1.exists() or rotation_file_2.exists()
+            ), "Rotation files should exist"
+
+        finally:
+            # Cleanup rotation files
+            for i in range(3):
+                rotation_file = tmp_path / f"small_{i}.log"
+                if rotation_file.exists():
+                    rotation_file.unlink()
+
+
+    def test_thread_safety(self, file_writer, tmp_path):
+        """Test thread safety with concurrent writes."""
+        temp_file = tmp_path / "thread_test.log"
+        file_writer.file_paths = [temp_file]
+
+        def write_logs():
+            for i in range(100):
+                file_writer.write(f"Thread message {i}")
+
+        # Create multiple threads
+        threads = [threading.Thread(target=write_logs) for _ in range(5)]
+
+        # Start all threads
+        for thread in threads:
+            thread.start()
+
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+
+        # Force the file handler to flush the buffer
+        file_writer.buffer_force_flush()
+
+        # Verify all messages were written
+        with open(temp_file, "r") as f:
+            content = f.read()
+            assert content.count("Thread message") == 500
+
+
+    def test_memory_cleanup(self, tmp_path):
+        """Test that file handles are properly cleaned up."""
+        import gc
+        import weakref
+
+        temp_file = tmp_path / "cleanup_test.log"
+
+        handler: FileWriter = FileWriter(file_paths=[temp_file])
+
+        # Create weak reference to track cleanup
+        weak_ref = weakref.ref(handler)
+
+        # Write some logs
+        handler.write("test message")
+
+        # Force cleanup
+        handler.buffer_force_flush()
+        handler.clear_sync_pool()
+        handler.force_shutdown()
+
+        # Delete reference to handler to allow garbage collection
+        del handler
+
+        # Force garbage collection
+        gc.collect()
+
+        # Verify cleanup
         assert (
-            rotation_file_1.exists() or rotation_file_2.exists()
-        ), "Rotation files should exist"
-
-    finally:
-        # Cleanup rotation files
-        for i in range(3):
-            rotation_file = tmp_path / f"small_{i}.log"
-            if rotation_file.exists():
-                rotation_file.unlink()
-
-
-def test_thread_safety(file_writer, tmp_path):
-    """Test thread safety with concurrent writes."""
-    temp_file = tmp_path / "thread_test.log"
-    file_writer.file_paths = [temp_file]
-
-    def write_logs():
-        for i in range(100):
-            file_writer.write(f"Thread message {i}")
-
-    # Create multiple threads
-    threads = [threading.Thread(target=write_logs) for _ in range(5)]
-
-    # Start all threads
-    for thread in threads:
-        thread.start()
-
-    # Wait for all threads to complete
-    for thread in threads:
-        thread.join()
-
-    # Force the file handler to flush the buffer
-    file_writer.buffer_force_flush()
-
-    # Verify all messages were written
-    with open(temp_file, "r") as f:
-        content = f.read()
-        assert content.count("Thread message") == 500
-
-
-def test_memory_cleanup(tmp_path):
-    """Test that file handles are properly cleaned up."""
-    import gc
-    import weakref
-
-    temp_file = tmp_path / "cleanup_test.log"
-
-    handler: FileWriter = FileWriter(file_paths=[temp_file])
-
-    # Create weak reference to track cleanup
-    weak_ref = weakref.ref(handler)
-
-    # Write some logs
-    handler.write("test message")
-
-    # Force cleanup
-    handler.buffer_force_flush()
-    handler.clear_sync_pool()
-    handler.force_shutdown()
-
-    # Delete reference to handler to allow garbage collection
-    del handler
-
-    # Force garbage collection
-    gc.collect()
-
-    # Verify cleanup
-    assert (
-        weak_ref() is None
-    ), "FileWriter should be cleaned up and weak reference should be None"
-
-
-@pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-def test_memory_usage(tmp_path, batch_size: int):
-    """
-    Test memory usage during file operations.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - **100 logs:**
-        -   Initial memory usage: 45273088 bytes (44212.0 KB, 43.18 MB)
-        -   After memory usage: 45305856 bytes (44244.0 KB, 43.21 MB)
-        -   Memory difference for 100 logs: 32.0 KB (0.03 MB)
-    - **300 logs:**
-        -   Initial memory usage: 45301760 bytes (44240.0 KB, 43.2 MB)
-        -   After memory usage: 45322240 bytes (44260.0 KB, 43.22 MB)
-        -   Memory difference for 300 logs: 20.0 KB (0.02 MB)
-    - **500 logs:**
-        -   Initial memory usage: 45301760 bytes (44240.0 KB, 43.2 MB)
-        -   After memory usage: 45363200 bytes (44300.0 KB, 43.26 MB)
-        -   Memory difference for 500 logs: 60.0 KB (0.06 MB)
-    - **1000 logs:**
-        -   Initial memory usage: 45342720 bytes (44280.0 KB, 43.24 MB)
-        -   After memory usage: 45363200 bytes (44300.0 KB, 43.26 MB)
-        -   Memory difference for 1000 logs: 20.0 KB (0.02 MB)
-    - **2000 logs:**
-        -   Initial memory usage: 45342720 bytes (44280.0 KB, 43.24 MB)
-        -   After memory usage: 45363200 bytes (44300.0 KB, 43.26 MB)
-        -   Memory difference for 2000 logs: 20.0 KB (0.02 MB)
-    """
-    print("Testing memory usage for batch size:", batch_size)
-
-    process = psutil.Process(os.getpid())
-    initial_memory = process.memory_info().rss  # Resident Set Size
-    initial_memory_mb = round(initial_memory / (1024 * 1024), 2)  # Convert to MB
-    initial_memory_kb = round(initial_memory / 1024, 2)  # Convert to KB
-
-    print(
-        f"Initial memory usage: {initial_memory} bytes ({initial_memory_kb} KB, {initial_memory_mb} MB)"
-    )
-
-    # Create a FileWriter instance
-    temp_file = tmp_path / "memory_test.log"
-    handler: FileWriter = FileWriter(file_paths=[temp_file])
-
-    # Write some logs
-    for i in range(batch_size):
-        handler.write(f"Memory test message {i}")
-
-    # Force the file handler to flush the buffer
-    handler.buffer_force_flush()
-
-    after_memory = process.memory_info().rss  # Resident Set Size after logging
-    after_memory_mb = round(after_memory / (1024 * 1024), 2)  # Convert to MB
-    after_memory_kb = round(after_memory / 1024, 2)  # Convert to KB
-    print(
-        f"After memory usage: {after_memory} bytes ({after_memory_kb} KB, {after_memory_mb} MB)"
-    )
-
-    leak_memory_kb = round((after_memory - initial_memory) / 1024, 2)  # Convert to KB
-    leak_memory_mb = round(
-        (after_memory - initial_memory) / (1024 * 1024), 2
-    )  # Convert to MB
-    print(
-        f"Memory difference for {batch_size} logs: {leak_memory_kb} KB ({leak_memory_mb} MB)"
-    )
-
-    # Cleanup
-    handler.clear_all()
-
-    assert len(handler.file_paths) == 0, "File paths should be cleared after operations"
-
-    with open(temp_file, "r") as f:
-        content = f.read()
-        assert len(content) > 0, "Log file should not be empty after writing logs"
-        for i in range(batch_size):
-            assert (
-                f"Memory test message {i}" in content
-            ), f"Log message {i} should be present in the file"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("batch_size", BATCH_TEST_CASES)
-async def test_memory_usage_async(tmp_path, batch_size: int):
-    """
-    Test memory usage during async file operations.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - **100 logs:**
-        -   Initial memory usage: 43151360 bytes (42140.0 KB, 41.15 MB)
-        -   After memory usage: 43200512 bytes (42188.0 KB, 41.2 MB)
-        -   Memory difference for 100 logs: 48.0 KB (0.05 MB)
-    - **300 logs:**
-        -   Initial memory usage: 43200512 bytes (42188.0 KB, 41.2 MB)
-        -   After memory usage: 43266048 bytes (42252.0 KB, 41.26 MB)
-        -   Memory difference for 300 logs: 64.0 KB (0.06 MB)
-    - **500 logs:**
-        -   Initial memory usage: 43249664 bytes (42236.0 KB, 41.25 MB)
-        -   After memory usage: 43327488 bytes (42312.0 KB, 41.32 MB)
-        -   Memory difference for 500 logs: 76.0 KB (0.07 MB)
-    - **1000 logs:**
-        -   Initial memory usage: 43315200 bytes (42300.0 KB, 41.31 MB)
-        -   After memory usage: 43433984 bytes (42416.0 KB, 41.42 MB)
-        -   Memory difference for 1000 logs: 116.0 KB (0.11 MB)
-    - **2000 logs:**
-        -   Initial memory usage: 43413504 bytes (42396.0 KB, 41.4 MB)
-        -   After memory usage: 43692032 bytes (42668.0 KB, 41.67 MB)
-        -   Memory difference for 2000 logs: 272.0 KB (0.27 MB)
-    """
-    print("Testing async memory usage for batch size:", batch_size)
-
-    process = psutil.Process(os.getpid())
-    initial_memory = process.memory_info().rss
-    initial_memory_mb = round(initial_memory / (1024 * 1024), 2)  # Convert to MB
-    initial_memory_kb = round(initial_memory / 1024, 2)  # Convert to KB
-
-    print(
-        f"Initial memory usage: {initial_memory} bytes ({initial_memory_kb} KB, {initial_memory_mb} MB)"
-    )
-    # Create a FileWriter instance
-    temp_file = tmp_path / "async_memory_test.log"
-    handler: FileWriter = FileWriter(file_paths=[temp_file])
-    # Write some logs asynchronously
-    for i in range(batch_size):
-        await handler.async_write(f"Async Memory test message {i}")
-    # Force the file handler to flush the buffer
-    handler.buffer_force_flush()
-
-    after_memory = process.memory_info().rss  # Resident Set Size after logging
-    after_memory_mb = round(after_memory / (1024 * 1024), 2)  # Convert to MB
-    after_memory_kb = round(after_memory / 1024, 2)  # Convert to KB
-    print(
-        f"After memory usage: {after_memory} bytes ({after_memory_kb} KB, {after_memory_mb} MB)"
-    )
-
-    leak_memory_kb = round((after_memory - initial_memory) / 1024, 2)  # Convert to KB
-    leak_memory_mb = round(
-        (after_memory - initial_memory) / (1024 * 1024), 2
-    )  # Convert to MB
-    print(
-        f"Memory difference for {batch_size} logs: {leak_memory_kb} KB ({leak_memory_mb} MB)"
-    )
-
-    # Cleanup
-    handler.clear_all()
-
-    assert len(handler.file_paths) == 0, "File paths should be cleared after operations"
-
-    with open(temp_file, "r") as f:
-        content = f.read()
-        assert len(content) > 0, "Log file should not be empty after writing logs"
-        for i in range(batch_size):
-            assert (
-                f"Async Memory test message {i}" in content
-            ), f"Log message {i} should be present in the file"
-
-
-# ----------------------------------------------------------------------------------------------
-# Stress Tests
-# ----------------------------------------------------------------------------------------------
-
-
-def test_file_writer_long_message(file_writer: FileWriter):
-    """
-    Test FileWriter with a very long message.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - Time taken to log a long message: 0.013 seconds.
-
-    """
-    long_message = "A" * 1000000  # 1 million characters
-
-    # Set up a temporary file for logging
-    temp_file = Path("long_message_test.log")
-    file_writer.file_paths = [temp_file]
-
-    # Log the long message
-    file_writer.write(long_message)
-
-    start_time: float = time.time()
-
-    # Force the file handler to flush the buffer
-    file_writer.buffer_force_flush()
-
-    end_time: float = time.time()
-    elapsed_time: float = end_time - start_time
-    print(f"Time taken to log long message: {elapsed_time:.3f} seconds")
-
-    # Check if the long message is written to the file
-    with open(temp_file, "r") as f:
-        content = f.read()
-        assert long_message in content
-
-
-@pytest.mark.asyncio
-async def test_file_writer_async_long_message(
-    file_writer: FileWriter, tmp_path
-):
-    """
-    Test FileWriter with a very long message in async mode.
-
-    Performance:
-    --------------
-    ### Specs:
-    - RAM: 16 GB
-    - Disk: 500 GB SSD
-    - CPU: Intel Core i7-4510u
-
-    ### Some Results:
-    - Time taken to log a long message: 0.011 seconds.
-
-    """
-
-    # Create a very long message
-    long_message = "A" * 1000000
-
-    # Set up a temporary file for logging
-    temp_file = tmp_path / "async_long_message_test.log"
-    file_writer.file_paths = [temp_file]
-
-    # Log the long message
-    await file_writer.async_write(long_message)
-
-    start_time: float = time.time()
-
-    # Force the file handler to flush the buffer
-    file_writer.buffer_force_flush()
-
-    end_time: float = time.time()
-    elapsed_time: float = end_time - start_time
-    print(f"Async time taken to log long message: {elapsed_time:.3f} seconds")
-
-    # Check if the long message is written to the file
-    with open(temp_file, "r") as f:
-        content = f.read()
-        assert long_message in content
-
-    file_writer.clear_all()
-    assert (
-        len(file_writer.file_paths) == 0
-    ), "File paths should be cleared after async log"
+            weak_ref() is None
+        ), "FileWriter should be cleaned up and weak reference should be None"
 
 
 # ----------------------------------------------------------------------------------------------
@@ -1159,47 +461,68 @@ async def test_file_writer_async_long_message(
 # ----------------------------------------------------------------------------------------------
 
 
-def test_file_writer_magic_methods(file_writer: FileWriter, tmp_path):
-    """Test the magic methods of FileWriter."""
+class TestFileWriterMagicMethods:
+    """
+    Test the magic methods of FileWriter.
+    This class contains tests for the magic methods of the FileWriter class to ensure they work as expected.
+    It includes tests for __str__, __repr__, __len__, __eq__, __iter__, __contains__, and __del__.
 
-    # Test __str__
-    str_repr = str(file_writer)
-    assert (
-        "FileWriter" in str_repr
-    ), "__str__ method should return a string representation of FileWriter"
+    Tests:
+    -------
+    - String representation (__str__)
+    - Detailed representation (__repr__)
+    - Length of file paths (__len__)
+    - Equality comparison (__eq__)
+    - Iteration over file paths (__iter__)
+    - Membership check (__contains__)
+    - Cleanup on deletion (__del__)
+    """
 
-    # Test __repr__
-    repr_repr = repr(file_writer)
-    assert (
-        "FileWriter" in repr_repr
-    ), "__repr__ method should return a detailed representation of FileWriter"
+    def test_file_writer_magic_methods(self, file_writer: FileWriter, tmp_path):
+        """Test the magic methods of FileWriter."""
 
-    # Test __len__
-    assert (
-        len(file_writer) == 2
-    ), "__len__ method should return the number of file paths (2 initially)"
+        # Test __str__
+        str_repr = str(file_writer)
+        assert (
+            "FileWriter" in str_repr
+        ), "__str__ method should return a string representation of FileWriter"
 
-    # Test __eq__
-    temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
-    handler = FileWriter(
-        file_paths=temp_files,  # Use temp files
-        retry_limit=0,
-        retry_delay=0.0,
-        backoff_factor=0.0,
-    )
-    assert (
-        file_writer == handler
-    ), "__eq__ method should compare file paths and other attributes"
+        # Test __repr__
+        repr_repr = repr(file_writer)
+        assert (
+            "FileWriter" in repr_repr
+        ), "__repr__ method should return a detailed representation of FileWriter"
 
-    # Test __iter__
-    for file_path in file_writer:
-        assert isinstance(file_path, Path), "__iter__ method should yield Path objects"
+        # Test __len__
+        assert (
+            len(file_writer) == 2
+        ), "__len__ method should return the number of file paths (2 initially)"
 
-    # Test __contains__
-    assert (
-        file_writer.file_paths[0] in file_writer
-    ), "__contains__ method should check if a file path is in the handler"
+        # Test __eq__
+        temp_files = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
+        handler = FileWriter(
+            file_paths=temp_files,  # Use temp files
+            retry_limit=0,
+            retry_delay=0.0,
+            backoff_factor=0.0,
+        )
+        assert (
+            file_writer == handler
+        ), "__eq__ method should compare file paths and other attributes"
 
-    # Test __del__
-    del file_writer  # This should not raise any exceptions
-    del handler  # This should not raise any exceptions either
+        # Test __iter__
+        for file_path in file_writer:
+            assert isinstance(file_path, Path), "__iter__ method should yield Path objects"
+
+        # Test __contains__
+        assert (
+            file_writer.file_paths[0] in file_writer
+        ), "__contains__ method should check if a file path is in the handler"
+
+        # Test __del__
+        del file_writer  # This should not raise any exceptions
+        del handler  # This should not raise any exceptions either
+
+
+# ----------------------------------------------------------------------------------------------
+# End of File

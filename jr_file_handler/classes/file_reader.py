@@ -21,11 +21,11 @@ from functools import partial
 import yaml
 
 # Utilities
-from jr_py_writer.utils.utilities import batcher, batcher_with_gcmanager
-from jr_py_writer.utils.module_enums import LogWriteMode
+from jr_file_handler.utils.utilities import batcher, batcher_with_gcmanager
+from jr_file_handler.utils.module_enums import LogWriteMode
 
 # Exceptions
-from jr_py_writer.exceptions.exceptions_file_reader import (
+from jr_file_handler.exceptions.exceptions_file_reader import (
     FileReaderConstructionError,
     FileReaderSettingsError,
     FileReaderReadError,
@@ -253,28 +253,29 @@ class FileReader:
         """
         try:
             if not isinstance(paths, list):
-                raise ValueError(
-                    f"File paths must be a list of Path objects, got {type(paths).__name__}"
-                )
+                paths = [paths]  # Convert single path to list
 
             if not paths:
                 raise ValueError("File paths list cannot be empty")
 
-            for path in paths:
-                if not isinstance(path, Path):
-                    raise ValueError(f"Invalid file path: {path}")
+            for i in range(len(paths)):
+                if isinstance(paths[i], str):
+                    paths[i] = Path(paths[i])
 
-                if path.exists() and path.is_dir():
+                if not isinstance(paths[i], Path):
+                    raise ValueError(f"Invalid file path: {paths[i]}")
+
+                if paths[i].exists() and paths[i].is_dir():
                     raise ValueError(
-                        f"File path points to a directory, not a file: {path}"
+                        f"File path points to a directory, not a file: {paths[i]}"
                     )
 
-                if not path.parent:
-                    raise ValueError(f"File path has no parent directory: {path}")
+                if not paths[i].parent:
+                    raise ValueError(f"File path has no parent directory: {paths[i]}")
 
-                if len(path.name) > 255:
+                if len(paths[i].name) > 255:
                     raise ValueError(
-                        f"File path name is too long, must be less than 255 characters: {path.name}"
+                        f"File path name is too long, must be less than 255 characters: {paths[i].name}"
                     )
 
             self._file_paths = paths
@@ -686,8 +687,6 @@ class FileReader:
         """
         with self._lock:  # Ensure thread-safe access to the file
             file_str: str = file.read()
-            if not file_str:
-                self.logger.warning(f"File {path} is a empty file.")
             return file_str
 
 
@@ -755,14 +754,16 @@ class FileReader:
                     self.logger.warning(
                         f"File {path} already exists in output, overwriting content."
                     )
-                output[path] = out_str
+                with self._lock:
+                    output[path] = out_str
                 
             except Exception as e:
                 self.logger.error(f"Error reading file {path}: {e}")
                 # If an exception occurs, log it and set the exception in results
-                output[path] = FileReaderReadError(
-                        f"Error reading file {path}: {e.__class__.__name__} -> {e}"
-                    )
+                with self._lock:
+                    output[path] = FileReaderReadError(
+                            f"Error reading file {path}: {e.__class__.__name__} -> {e}"
+                        )
         return output
 
 
@@ -790,17 +791,17 @@ class FileReader:
                     f"File {path} is not in the temporary sync pool."
                 )
                 self.logger.debug(f"Opening file {path} for reading...")
-                file = open(path, self.write_mode.value, encoding="utf-8")
-            
                 with self._lock:
+                    file = open(path, self.write_mode.value, encoding="utf-8")
                     self._temp_sync_pool[path] = file
 
             # Check if the file is closed or not readable
             # Unlike to happen, but just in case
             if file.closed:
                 self.logger.warning(f"File {path} is closed. Reopening it...")
-                # Reopen the file if it is closed
-                file = open(path, "r", encoding="utf-8")
+                with self._lock:
+                    # Reopen the file if it is closed
+                    file = open(path, "r", encoding="utf-8")
 
             if not file.readable():
                 self.logger.error(f"File {path} is not readable.")
@@ -1015,19 +1016,20 @@ class FileReader:
                     self.logger.warning(
                         f"File {path} is not in the temporary sync pool."
                     )
-                    self.logger.info(f"Opening file {path} for reading...")
-                    file = open(path, self.write_mode.value, encoding="utf-8")
-
-                    # Send to sync pool
                     with self._lock:
+                        self.logger.info(f"Opening file {path} for reading...")
+                        file = open(path, self.write_mode.value, encoding="utf-8")
+
+                        # Send to sync pool
                         self._temp_sync_pool[path] = file
 
             # Check if the file is closed or not readable
             # Unlike to happen, but just in case
             if file.closed:
                 self.logger.warning(f"File {path} is closed. Reopening it...")
-                # Reopen the file if it is closed
-                file = open(path, "r", encoding="utf-8")
+                with self._lock:
+                    # Reopen the file if it is closed
+                    file = open(path, "r", encoding="utf-8")
 
             if not file.readable():
                 self.logger.error(f"File {path} is not readable.")
@@ -1489,36 +1491,59 @@ class FileReader:
 
     def unpacker(
         self,
-        dict_gen: Dict[Path, Generator[str, None, None]],
+        dict_gen: Dict[Path, Generator[str, None, None] | Exception],
         chunk: int | None = None
-    ) -> Dict[Path, str]:
+    ) -> Dict[Path, str | Exception]:
         
         """
         Unpack the content of generators in a dictionary.
 
         Arguments:
-            dict_gen (Dict[Path, Generator[str, None, None]]): A dictionary mapping file paths to their content as generators.
+            dict_gen (Dict[Path, Generator[str, None, None] | Exception]): A dictionary mapping file paths to their content as generators.
             chunk (int | None): Optional chunk size to limit the number of lines read from each generator.
 
         Returns:
-            out (Dict[Path, str]) : A dictionary mapping file paths to their unpacked content.
+            out (Dict[Path, str | Exception]) : A dictionary mapping file paths to their unpacked content.
         """
-        results: Dict[Path, str] = {}
+        # Validate input
+        if not isinstance(dict_gen, dict):
+            raise TypeError("Input must be a dictionary of generators.")
+        if not dict_gen:
+            raise ValueError("Input dictionary is empty. Cannot unpack generators.")
+        
+        if not isinstance(chunk, (int, type(None))):
+            raise TypeError("Chunk size must be an integer or None.")
+
+        # Initialize results dictionary
+        results: Dict[Path, str | Exception] = {}
+
+        # Iterate over the dictionary of generators
         for path, gen in dict_gen.items():
-            try:
-                if chunk is not None:
-                    # If chunk is specified, limit the number of lines read
-                    results[path] = "".join(
-                        line for _, line in zip(range(chunk), gen)
+
+            if not isinstance(path, Path):
+                raise TypeError(f"Key {path} must be a Path object, got {type(path)}.")
+            if not isinstance(gen, (Generator, Exception)):
+                raise TypeError(
+                    f"Value for {path} must be a Generator or Exception, got {type(gen)}."
+                )
+            
+            if isinstance(gen, Exception):
+                self.logger.error(f"Generator for file {path} is an exception: {gen}")
+                results[path] = gen
+            else:
+                if chunk:
+                    # Read a limited number of lines from the generator
+                    results[path] = ''.join(
+                        [next(gen) for _ in range(chunk) if gen is not None]
                     )
                 else:
-                    # Otherwise, read all lines from the generator
-                    results[path] = "".join(list(gen))
-            except Exception as e:
-                self.logger.error(f"Error unpacking generator for file {path}: {e}")
-                results[path] = f"Error unpacking generator: {e}"
+                    # Read all lines from the generator
+                    results[path] = ''.join(
+                        [line for line in gen if line is not None]
+                    )
+
         return results
-        
+    
 
     # Thread Pool Management
 
@@ -1625,7 +1650,7 @@ class FileReader:
             if not file_paths:
                 raise TypeError("No file paths provided in the configuration.")
             
-            write_mode: LogWriteMode = LogWriteMode(config_dict.get("write_mode", "READ"))
+            write_mode: LogWriteMode = LogWriteMode(config_dict.get("write_mode", "r"))
 
             retry_limit: int = config_dict.get("retry_limit", 3)
             retry_delay: float = config_dict.get("retry_delay", 1.0)

@@ -19,28 +19,26 @@ from threading import Lock
 from functools import partial
 
 # Local imports
-from jr_py_writer.utils.module_enums import LogWriteMode
+from jr_file_handler.utils.module_enums import LogWriteMode
 
 # Utilities
-from jr_py_writer.utils.utilities import batcher, batcher_with_gcmanager
+from jr_file_handler.utils.utilities import batcher, batcher_with_gcmanager
 
 # Exceptions
-from jr_py_writer.exceptions.exceptions_file_handler import (
-    FileHandlerConstructionError,
-    FileHandlerSettingsError,
-    FileHandlerSyncPoolInitError,
-    FileHandlerSyncPoolCleanupError,
-    FileHandlerWriteError,
-    FileHandlerAsyncWriteError,
-    FileHandleRotateError,
-    FileHandlerConfigError,
-    FileHandlerBufferError,
-    FileHandlerFlushError,
-    FileHandlerShutdownError,
-    FileHandlerResumeError,
-    FileHandlerResetError,
-    FileHandlerReadError,
-    FileHandlerAsyncReadError
+from jr_file_handler.exceptions.exceptions_file_writer import (
+    FileWriterConstructionError,
+    FileWriterSettingsError,
+    FileWriterSyncPoolInitError,
+    FileWriterSyncPoolCleanupError,
+    FileWriterWriteError,
+    FileWriterAsyncWriteError,
+    FileWriterRotateError,
+    FileWriterConfigError,
+    FileWriterBufferError,
+    FileWriterFlushError,
+    FileWriterShutdownError,
+    FileWriterResumeError,
+    FileWriterResetError,
 )
 
 
@@ -49,109 +47,11 @@ from jr_py_writer.exceptions.exceptions_file_handler import (
 # ----------------------------------------------------------------------------------------------
 
 
-class FileHandler:
-    """
-    A handler that writes log messages to one or more files.
-    FileHandler manages writing log messages to specified file paths with
-    configurable write modes and retry mechanisms for handling file operation failures.
+class FileWriter:
+    
 
-    The class also supports reading from files.
 
-    The handler supports both synchronous and asynchronous writing and reading operations,
-    automatically creating parent directories for log files if they don't exist.
-    It also provides thread-safe writing and reading with retry logic to handle temporary
-    file system access issues.
-
-    Attributes:
-        file_paths (List[Path]): List of file paths where log messages will be written.
-        write_mode (LogWriteMode): Mode for writing to files (append or overwrite).
-        retry_limit (int): Number of times to retry failed file operations.
-        retry_delay (float): Delay in seconds between retry attempts.
-        backoff_factor (float): Factor to increase the retry delay exponentially.
-        max_file_size (int): Maximum size of log files in bytes before rotation.
-        max_rotation (int): Maximum number of rotated log files to keep.
-        max_buffer_size (int): Maximum size of the buffer for log messages.
-        use_write_flush (bool): Whether to flush the file after each write operation.
-        logger (logging.Logger): Logger instance for logging errors and information.
-
-    max_buffer_size
-    -------------
-    -   The maximum size of the buffer for writing log messages in bytes.
-    -   If used, the buffer will hold log messages until it reaches the maximum size.
-        -   When the buffer size exceeds the maximum, it will automatically flush the buffer
-        -   If size is not reached, the buffer will be flushed when the context manager exits or when `buffer_force_flush()` is called.
-        -   **ALWAYS FLUSH THE BUFFER IF NOT USING CONTEXT MANAGER, OTHERWISE DATA MAY BE LOST!**
-
-    use_write_flush
-    -------------
-    -   If set to True, the handler will flush the file after each write operation.
-    -   If set to False, the handler will not flush the file after each write operation.
-        -   Will improve performance but may lead to data loss in case of a crash.
-        -   Must manually flush using `writer_force_flush()` method, or automatically with context manager.
-
-    Methods:
-    --------
-        - Log Writing:
-            #### log(message: str) - None:
-                Write a log message to the specified file paths synchronously.
-            #### async_log(message: str) - None:
-                Asynchronously write a log message to the specified file paths.
-            #### buffer_force_flush() - None:
-                Force flush the buffer to the file(s) immediately.
-            #### writer_force_flush() - None:
-                Force flush the file(s) immediately, ensuring all data is written to disk.
-        - Log Reading:
-            #### read_log() - Dict[Path, str]:
-                Read the content of all files in the file paths synchronously.
-            #### async_read_log() - Dict[Path, str]:
-                Asynchronously read the content of all files in the file paths.
-        - Pool Management:
-            #### clear_sync_pool() - None:
-                Clear the temporary pool for synchronous file operations.
-            #### force_shutdown() - None:
-                Force shutdown the file handler, closing all files and clearing the pool.
-            #### resume() - None:
-                Resume the file handler after a forced shutdown, reinitializing the pool.
-        - Cleanup:
-            #### __del__() - None:
-                Cleanup resources when the FileHandler object is destroyed.
-            #### clear_sync_pool() - None:
-                Clear the temporary pool for synchronous file operations.
-            #### clear_all() - None:
-                Clear all resources, including file paths and the synchronous pool.
-        - Configuration
-            #### reset() - None:
-                Reset the FileHandler to its initial state, clearing all settings and file paths.
-            #### config(**kwargs) - None:
-                Configure the FileHandler with various settings like file paths, write mode, retry limits, etc.
-            #### config_dict(Dict[str, Any]) - None:
-                Configure the FileHandler using a dictionary of settings.
-            #### config_json(json_str: str) - None:
-                Configure the FileHandler using a JSON string of settings.
-            #### config_yaml(yaml_str: str) - None:
-                Configure the FileHandler using a YAML string of settings.
-        
-    Example:
-        ```python
-        # Create a file handler that writes to multiple log files
-        handler = FileHandler(
-            file_paths=[Path("app.log"), Path("debug.log")],
-            write_mode=LogWriteMode.APPEND,
-            retry_limit=3,
-            retry_delay=0.5
-        # Write log message to all specified files
-        handler.log("Application started")
-
-        # Asynchronously write log message
-        def async main():
-            await handler.async_log("Asynchronous logging started")
-        # Run asynchronous
-        asyncio.run(main())
-        ```
-
-    """
-
-    # --------------
+     # --------------
     # Slots
 
     __slots__ = (
@@ -247,7 +147,7 @@ class FileHandler:
     @property
     def logger(self) -> logging.Logger:
         """
-        Returns the logger instance associated with the FileHandler.
+        Returns the logger instance associated with the FileWriter.
         """
         if not hasattr(self, "_logger"):
             self._logger = logging.getLogger(__name__)
@@ -318,7 +218,7 @@ class FileHandler:
             self._file_paths = paths
         except Exception as e:
             self.logger.error(f"Invalid file paths: {e.__class__.__name__} -> {e}")
-            raise FileHandlerSettingsError(
+            raise FileWriterSettingsError(
                 f"Invalid file paths: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -344,7 +244,7 @@ class FileHandler:
             )
         except Exception as e:
             self.logger.error(f"Invalid write mode: {e.__class__.__name__} -> {e}")
-            raise FileHandlerSettingsError(
+            raise FileWriterSettingsError(
                 f"Invalid write mode: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -363,7 +263,7 @@ class FileHandler:
             self._retry_limit = limit
         except Exception as e:
             self.logger.error(f"Invalid retry limit: {e.__class__.__name__} -> {e}")
-            raise FileHandlerSettingsError(
+            raise FileWriterSettingsError(
                 f"Invalid retry limit: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -382,7 +282,7 @@ class FileHandler:
             self._retry_delay = delay
         except Exception as e:
             self.logger.error(f"Invalid retry delay: {e.__class__.__name__} -> {e}")
-            raise FileHandlerSettingsError(
+            raise FileWriterSettingsError(
                 f"Invalid retry delay: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -401,7 +301,7 @@ class FileHandler:
             self._backoff_factor = factor
         except Exception as e:
             self.logger.error(f"Invalid backoff factor: {e.__class__.__name__} -> {e}")
-            raise FileHandlerSettingsError(
+            raise FileWriterSettingsError(
                 f"Invalid backoff factor: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -422,7 +322,7 @@ class FileHandler:
             self.logger.error(
                 f"Invalid maximum file size: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerSettingsError(
+            raise FileWriterSettingsError(
                 f"Invalid maximum file size: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -443,14 +343,14 @@ class FileHandler:
             self.logger.error(
                 f"Invalid maximum rotation: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerSettingsError(
+            raise FileWriterSettingsError(
                 f"Invalid maximum rotation: {e.__class__.__name__} -> {e}"
             ) from e
 
     @logger.setter
     def logger(self, logger: logging.Logger) -> None:
         """
-        Sets the logger instance associated with the FileHandler.
+        Sets the logger instance associated with the FileWriter.
 
         Arguments:
             logger (logging.Logger): The logger instance to set.
@@ -461,7 +361,7 @@ class FileHandler:
 
             self._logger = logger
         except Exception as e:
-            raise FileHandlerSettingsError(
+            raise FileWriterSettingsError(
                 f"Invalid logger: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -482,7 +382,7 @@ class FileHandler:
             self.logger.error(
                 f"Invalid maximum buffer size: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerSettingsError(
+            raise FileWriterSettingsError(
                 f"Invalid maximum buffer size: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -503,7 +403,7 @@ class FileHandler:
             self.logger.error(
                 f"Invalid use_write_flush setting: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerSettingsError(
+            raise FileWriterSettingsError(
                 f"Invalid use_write_flush setting: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -524,7 +424,7 @@ class FileHandler:
         logger: logging.Logger | None = None,
     ) -> None:
         """
-        Initialize the FileHandler with file paths, log level, and log format.
+        Initialize the FileWriter with file paths, log level, and log format.
 
         Arguments:
             file_paths (List[Union[Path, str]]):
@@ -610,14 +510,15 @@ class FileHandler:
             self._threadpool: ThreadPoolExecutor = ThreadPoolExecutor(
                 max_workers=max_workers
             )
+
             self._buffer: StringIO = StringIO()
 
         except Exception as e:
             self.logger.error(
-                f"Error initializing FileHandler: {e.__class__.__name__} -> {e}"
+                f"Error initializing FileWriter: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerConstructionError(
-                f"Error initializing FileHandler: {e.__class__.__name__} -> {e}"
+            raise FileWriterConstructionError(
+                f"Error initializing FileWriter: {e.__class__.__name__} -> {e}"
             ) from e
 
     # --------------
@@ -625,13 +526,13 @@ class FileHandler:
 
     def __str__(self) -> str:
         """
-        Returns a string representation of the FileHandler.
+        Returns a string representation of the FileWriter.
 
         Returns:
-            str: A string representation of the FileHandler.
+            str: A string representation of the FileWriter.
         """
         return (
-            f"FileHandler(file_paths={self.file_paths}, "
+            f"FileWriter(file_paths={self.file_paths}, "
             f"write_mode={self.write_mode})"
             f"retry_limit={self.retry_limit}, "
             f"retry_delay={self.retry_delay})"
@@ -639,15 +540,15 @@ class FileHandler:
 
     def __eq__(self, other: object) -> bool:
         """
-        Checks if two FileHandler instances are equal.
+        Checks if two FileWriter instances are equal.
 
         Arguments:
-            other (FileHandler): The other FileHandler instance to compare.
+            other (object): The other instance to compare.
 
         Returns:
             bool: True if both instances are equal, False otherwise.
         """
-        if not isinstance(other, FileHandler):
+        if not isinstance(other, FileWriter):
             return False
         return (
             self.file_paths == other.file_paths
@@ -658,10 +559,10 @@ class FileHandler:
 
     def __ne__(self, other: object) -> bool:
         """
-        Checks if two FileHandler instances are not equal.
+        Checks if two FileWriter instances are not equal.
 
         Arguments:
-            other (FileHandler): The other FileHandler instance to compare.
+            other (FileWriter): The other FileWriter instance to compare.
 
         Returns:
             bool: True if both instances are not equal, False otherwise.
@@ -670,7 +571,7 @@ class FileHandler:
 
     def __len__(self) -> int:
         """
-        Returns the number of file paths in the FileHandler.
+        Returns the number of file paths in the FileWriter.
 
         Returns:
             int: The number of file paths.
@@ -679,7 +580,7 @@ class FileHandler:
 
     def __iter__(self) -> Iterator[Path]:
         """
-        Returns an iterator over the file paths in the FileHandler.
+        Returns an iterator over the file paths in the FileWriter.
 
         Returns:
             Iterator[Path]: An iterator over the file paths.
@@ -712,13 +613,13 @@ class FileHandler:
 
     def __contains__(self, item: Path) -> bool:
         """
-        Checks if a file path is in the FileHandler.
+        Checks if a file path is in the FileWriter.
 
         Arguments:
             item (Path): The file path to check.
 
         Returns:
-            bool: True if the file path is in the FileHandler, False otherwise.
+            bool: True if the file path is in the FileWriter, False otherwise.
         """
         if not isinstance(item, Path):
             raise ValueError(f"Item must be a Path object, got {type(item).__name__}")
@@ -726,13 +627,13 @@ class FileHandler:
 
     def __enter__(self):
         """
-        Context manager enter method for FileHandler.
+        Context manager enter method for FileWriter.
         """
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
-        Context manager exit method for FileHandler.
+        Context manager exit method for FileWriter.
         """
 
         # Force flush buffer before cleanup
@@ -757,7 +658,7 @@ class FileHandler:
 
     async def __aenter__(self):
         """
-        Asynchronous context manager enter method for FileHandler.
+        Asynchronous context manager enter method for FileWriter.
         """
         return self
 
@@ -832,7 +733,7 @@ class FileHandler:
             self.logger.error(
                 f"Error initializing sync pool: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerSyncPoolInitError(
+            raise FileWriterSyncPoolInitError(
                 f"Error initializing sync pool: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -842,6 +743,10 @@ class FileHandler:
         This method closes all files in the temporary pool and clears it.
         """
         try:
+            # Check if the pool exists
+            if not hasattr(self, "_temp_sync_pool"):
+                return
+
             # Check if the sync pool is empty
             if not self._temp_sync_pool:
                 return
@@ -866,7 +771,7 @@ class FileHandler:
             self.logger.error(
                 f"Error clearing sync pool: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerSyncPoolCleanupError(
+            raise FileWriterSyncPoolCleanupError(
                 f"Error clearing sync pool: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -962,7 +867,7 @@ class FileHandler:
             self.logger.error(
                 f"Error rotating file {path}: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandleRotateError(
+            raise FileWriterRotateError(
                 f"Error rotating file {path}: {e.__class__.__name__} -> {e}"
             ) from e
 
@@ -1272,292 +1177,17 @@ class FileHandler:
 
 
     # --------------
-    # File Reading Methods
-
-    def _read_file(self, file: TextIOWrapper, path: Path) -> str:
-        """
-        Read the content of a file.
-
-        Arguments:
-            file (TextIOWrapper): The file object to read from.
-            path (Path): The file path for logging.
-
-        Returns:
-            out (str) : The content of the file.
-        """
-        try:
-            with self._lock:  # Ensure thread-safe access to the file
-                file_str: str = file.read()
-                if not file_str:
-                    self.logger.warning(f"File {path} is a empty file.")
-                return file_str
-        except Exception as e:
-            self.logger.error(f"Error reading file {path}: {e}")
-            raise FileHandlerReadError(f"Error reading file {path}: {e}") from e
-
-    def _read_file_retries(self, file: TextIOWrapper, path: Path) -> str:
-        """
-        Read the content of a file with retry logic.
-
-        Arguments:
-            file (TextIOWrapper): The file object to read from.
-            path (Path): The file path for logging.
-
-        Returns:
-            out (str) : The content of the file.
-        """
-        if self.retry_limit <= 0:
-            return self._read_file(file, path)
-
-        counter: int = 0
-        while counter < self.retry_limit:
-            try:
-                return self._read_file(file, path)
-            except Exception as e:
-                counter += 1
-                if counter >= self.retry_limit:
-                    self.logger.error(
-                        f"Failed to read from {file} after {self.retry_limit} attempts: {e}"
-                    )
-                    raise RuntimeError(
-                        f"Failed to read from {file} after {self.retry_limit} attempts: {e}"
-                    ) from e
-
-                # Wait before retrying
-                if self.retry_delay > 0:
-                    if self.backoff_factor:
-                        # Exponential backoff
-                        exp_time: float = self.retry_delay * (
-                            self.backoff_factor ** (counter - 1)
-                        )
-                        self.logger.warning(
-                            f"Retrying to read from {file} in {exp_time:.2f} seconds (attempt {counter}/{self.retry_limit})"
-                        )
-                        time.sleep(exp_time)
-                    else:
-                        # Linear backoff
-                        self.logger.warning(
-                            f"Retrying to read from {file} in {self.retry_delay:.2f} seconds (attempt {counter}/{self.retry_limit})"
-                        )
-                        time.sleep(self.retry_delay)
-        return ""
-
-    def _read_batch(self, path_batch: List[Path]) -> Dict[Path, str]:
-        """
-        Read the content of a batch of files.
-
-        Arguments:
-            path_batch (List[Path]): The list of file paths to read from.
-
-        Returns:
-            out (Dict[Path, str]) : A dictionary mapping file paths to their content.
-        """
-        results: Dict[Path, str] = {}
-        for path in path_batch:
-            try:
-                out_str: str | None = self._read_file_prep(path)
-                if out_str is not None:
-                    results[path] = out_str
-            except Exception as e:
-                self.logger.error(f"Error reading file {path}: {e}")
-                results[path] = f"Error reading file : {e}"
-        return results
-
-    def _read_file_prep(self, path: Path) -> str:
-        """
-        Read the content of a file using the synchronous pool.
-
-        Arguments:
-            path (Path): The file path to read from.
-
-        Returns:
-            out (str) : The content of the file.
-        """
-        try:
-
-            file: TextIOWrapper | None = self._temp_sync_pool.get(path)
-            
-            if not file:
-                self.logger.warning(
-                    f"File {path} is not in the temporary sync pool."
-                )
-                return "File not found in pool."
-
-            # Check if the file is closed or not readable
-            # Unlike to happen, but just in case
-            if file.closed:
-                self.logger.warning(f"File {path} is closed. Reopening it...")
-                # Reopen the file if it is closed
-                file = open(path, "r", encoding="utf-8")
-
-            if not file.readable():
-                self.logger.error(f"File {path} is not readable.")
-                return "File is not readable."
-            
-            return self._read_file_retries(file, path)
-
-        except Exception as e:
-            self.logger.error(f"Error reading file {path}: {e}")
-            raise FileHandlerReadError(f"Error reading file {path}: {e}") from e
-
-    def _reader(
-        self
-    ) -> Dict[Path, str]:
-        """
-        Read the content of all files in the file paths.
-
-        Returns:
-            out (Dict[Path, str]) : A dictionary mapping file paths to their content.
-        """
-        if not self.file_paths:
-            raise ValueError("File paths list is empty. Cannot read files.")
-
-        futures = {
-            self._threadpool.submit(partial(self._read_file_prep, path)): path for path in self.file_paths
-        }
-
-        results: Dict[Path, str] = {}
-        for future in as_completed(futures):
-            path = futures[future]
-            # Get the result from the future
-            try:
-                out_str: str = future.result()
-                if out_str is not None:
-                    results[path] = out_str
-            except Exception as e:
-                self.logger.error(f"Error reading files : {e}")
-                raise FileHandlerReadError(f"Error reading files: {e}") from e
-
-        return results
-
-    def _reader_handler(self) -> Dict[Path, str]:
-        """
-        Read the content of all files in the file paths in batches.
-
-        Returns:
-            out (Dict[Path, str]) : A dictionary mapping file paths to their content.
-        """
-        # If the number of file paths is greater than 50, use the batcher function.
-        if len(self.file_paths) > 50:
-            batches_of_paths: List[List[Path]] = list(batcher(self.file_paths))
-        # If the number of file paths is greater than 1000, use the batcher_with_gcmanager function.
-        elif len(self.file_paths) > 1000:
-            batches_of_paths: List[List[Path]] = list(
-                batcher_with_gcmanager(self.file_paths)
-            )
-        # Otherwise, use the list of file paths.
-        else:
-            return self._reader()
-
-        results: Dict[Path, str] = {}
-        futures = {
-            self._threadpool.submit(partial(self._read_batch, path_batch)): path_batch
-            for path_batch in batches_of_paths
-        }
-        # Handle the results from the futures
-        for future in as_completed(futures):
-            try:
-                results.update(future.result())
-            except Exception as e:
-                self.logger.error(f"Error reading files in batch: {e}")
-                raise FileHandlerReadError(
-                    f"Error reading files in batch: {e.__class__.__name__} -> {e}"
-                ) from e
-            
-        # Return the results dictionary containing file paths and their content
-        self.logger.debug(f"Read {len(results)} files successfully.")
-        return results
-
-    async def _async_read(self) -> Dict[Path, str]:
-        """
-        Asynchronously read the content of all files in the file paths.
-
-        Returns:
-            out (Dict[Path, str]) : A dictionary mapping file paths to their content.
-        """
-        if not self.file_paths:
-            raise ValueError("File paths list is empty. Cannot read files.")
-
-        def read_all_files():
-            results = {}
-            for path in self.file_paths:
-                try:
-                    out_str = self._read_file_prep(path)
-                    if out_str is not None:
-                        results[path] = out_str
-                except Exception as e:
-                    self.logger.error(f"Error reading file {path}: {e}")
-                    results[path] = f"Error reading file: {e}"
-            return results
-
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self._threadpool, read_all_files)
-
-    async def _async_read_batch(
-        self, path_batch: List[Path]
-    ) -> Dict[Path, str]:
-        """
-        Asynchronously read the content of a batch of files.
-
-        Arguments:
-            path_batch (List[Path]): The list of file paths to read from.
-
-        Returns:
-            out (Dict[Path, str]) : A dictionary mapping file paths to their content.
-        """
-        # Use asyncio to send file read tasks concurrently
-        return await asyncio.get_event_loop().run_in_executor(
-            self._threadpool, partial(self._read_batch, path_batch)
-        )
-
-    async def _async_reader_handler(self) -> Dict[Path, str]:
-        """
-        Asynchronously read the content of all files in the file paths in batches.
-
-        Returns:
-            out (Dict[Path, str]) : A dictionary mapping file paths to their content.
-        """
-        # If the number of file paths is greater than 50, use the batcher function.
-        if len(self.file_paths) > 50:
-            batches_of_paths: List[List[Path]] = list(batcher(self.file_paths))
-        # If the number of file paths is greater than 1000, use the batcher_with_gcmanager function.
-        elif len(self.file_paths) > 1000:
-            batches_of_paths: List[List[Path]] = list(
-                batcher_with_gcmanager(self.file_paths)
-            )
-        # Otherwise, use the list of file paths.
-        else:
-            return await self._async_read()
-
-        # Handle the results from the batches
-        results: Dict[Path, str] = {}
-        for path_batch in batches_of_paths:
-            try:
-                batch_results: Dict[Path, str] = await self._async_read_batch(path_batch)
-                results.update(batch_results)
-            except Exception as e:
-                self.logger.error(f"Error reading files in batch: {e}")
-                raise FileHandlerReadError(
-                    f"Error reading files in batch: {e.__class__.__name__} -> {e}"
-                ) from e
-            
-        # Return the results dictionary containing file paths and their content
-        self.logger.debug(f"Read {len(results)} files successfully.")
-        return results
-
-
-    # --------------
     # Methods
 
     def clear_all(self) -> None:
         """
-        Clear all resources used by the FileHandler.
+        Clear all resources used by the FileWriter.
         This method will:
         -   Force flush the buffer if it exists and has content.
         -   Clear the synchronous pool.
         -   Clean the file paths on exit.
         -   Clean the thread pool executor if it exists.
-        -   This method is useful for cleaning up resources when the FileHandler is no longer needed.
+        -   This method is useful for cleaning up resources when the FileWriter is no longer needed.
         """
 
         # Force flush the buffer if it exists and has content
@@ -1576,28 +1206,29 @@ class FileHandler:
             if not self._threadpool._shutdown:
                 self._threadpool.shutdown(wait=True)
 
+
     # Logging
 
-    def log(self, message: str) -> None:
+    def write(self, message: str) -> None:
         """
-        Write the log message to the file(s).
+        Write the message to the file(s).
 
         Arguments:
             message (str): The log message to write.
         """
         try:
             if not isinstance(message, str):
-                raise ValueError("Log message must be a string")
+                raise ValueError("Message must be a string")
 
             if not message.strip():
-                raise ValueError("Log message cannot be empty or whitespace")
+                raise ValueError("Message cannot be empty or whitespace")
 
             if not self.file_paths:
                 return
             
             if self.write_mode not in (LogWriteMode.APPEND, LogWriteMode.OVERWRITE, LogWriteMode.READ_WRITE):
                 raise ValueError(
-                    f"FileHandler is not configured for writing. Use LogWriteMode.APPEND, LogWriteMode.OVERWRITE, or LogWriteMode.READ_WRITE."
+                    f"FileWriter is not configured for writing. Use LogWriteMode.APPEND, LogWriteMode.OVERWRITE, or LogWriteMode.READ_WRITE."
                     f"\n\tCurrent mode: {self.write_mode.value}\n"
                 )
 
@@ -1625,30 +1256,31 @@ class FileHandler:
             self.logger.error(
                 f"Error writing log message: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerWriteError(
+            raise FileWriterWriteError(
                 f"Error writing log message: {e.__class__.__name__} -> {e}"
             ) from e
 
-    async def async_log(self, message: str) -> None:
+
+    async def async_write(self, message: str) -> None:
         """
-        Asynchronously write the log message to the file(s).
+        Asynchronously write the message to the file(s).
 
         Arguments:
             message (str): The log message to write.
         """
         try:
             if not isinstance(message, str):
-                raise ValueError("Log message must be a string")
+                raise ValueError("Message must be a string")
 
             if not message.strip():
-                raise ValueError("Log message cannot be empty or whitespace")
+                raise ValueError("Message cannot be empty or whitespace")
 
             if not self.file_paths:
                 return
             
             if self.write_mode not in (LogWriteMode.APPEND, LogWriteMode.OVERWRITE, LogWriteMode.READ_WRITE):
                 raise ValueError(
-                    f"FileHandler is not configured for writing. Use LogWriteMode.APPEND, LogWriteMode.OVERWRITE, or LogWriteMode.READ_WRITE."
+                    f"FileWriter is not configured for writing. Use LogWriteMode.APPEND, LogWriteMode.OVERWRITE, or LogWriteMode.READ_WRITE."
                     f"\n\tCurrent mode: {self.write_mode.value}\n"
                 )
 
@@ -1676,9 +1308,10 @@ class FileHandler:
             self.logger.error(
                 f"Error writing log message asynchronously: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerAsyncWriteError(
+            raise FileWriterAsyncWriteError(
                 f"Error writing log message asynchronously: {e.__class__.__name__} -> {e}"
             ) from e
+
 
     # Buffer Management
 
@@ -1705,62 +1338,40 @@ class FileHandler:
             self.logger.error(
                 f"Error forcing buffer flush: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerBufferError(
+            raise FileWriterBufferError(
                 f"Error forcing buffer flush: {e.__class__.__name__} -> {e}"
             ) from e
 
-    # Reader
 
-    def read_log(self) -> Dict[Path, str]:
+    # Writer Performance
+
+    def writer_force_flush(self) -> None:
         """
-        Read the content of all files in the file paths.
-
-        Returns:
-            Dict[Path, str]: A dictionary mapping file paths to their content.
-        """
-        try:
-            if not self.file_paths:
-                raise ValueError("File paths list is empty. Cannot read files.")
-            
-            if self.write_mode not in (LogWriteMode.READ, LogWriteMode.READ_WRITE):
-                raise ValueError(
-                    f"FileHandler is not configured for reading. Use LogWriteMode.READ or LogWriteMode.READ_WRITE."
-                    f"\n\tCurrent mode: {self.write_mode.value}\n"
-                )
-
-            # Initialize the synchronous pool
-            self._ensure_sync_pool()
-
-            return self._reader_handler()
-        except Exception as e:
-            self.logger.error(f"Error reading files: {e.__class__.__name__} -> {e}")
-            raise FileHandlerReadError(f"Error reading files: {e.__class__.__name__} -> {e}") from e
-    
-
-    async def async_read_log(self) -> Dict[Path, str]:
-        """
-        Asynchronously read the content of all files in the file paths.
-
-        Returns:
-            Dict[Path, str]: A dictionary mapping file paths to their content.
+        Force flush the file writer.
+        This method will ensure that all pending writes are flushed to the file(s).
         """
         try:
-            if not self.file_paths:
-                raise ValueError("File paths list is empty. Cannot read files.")
-            
-            if self.write_mode not in (LogWriteMode.READ, LogWriteMode.READ_WRITE):
-                raise ValueError(
-                    f"FileHandler is not configured for reading. Use LogWriteMode.READ or LogWriteMode.READ_WRITE."
-                    f"\n\tCurrent mode: {self.write_mode.value}\n"
-                )
+            if not self._temp_sync_pool:
+                return None
 
-            # Initialize the asynchronous pool
-            self._init_sync_pool()
+            with self._lock:  # Ensure thread-safe access to the sync pool
+                # Flush all files in the temporary sync pool
+                for path, file in self._temp_sync_pool.items():
+                    try:
+                        if not file.closed:
+                            file.flush()
+                    except Exception as e:
+                        raise RuntimeError(
+                            f"Error flushing file {path}: {e.__class__.__name__} -> {e}"
+                        ) from e
 
-            return await self._async_reader_handler()
         except Exception as e:
-            self.logger.error(f"Error reading files asynchronously: {e.__class__.__name__} -> {e}")
-            raise FileHandlerAsyncReadError(f"Error reading files asynchronously: {e.__class__.__name__} -> {e}") from e
+            self.logger.error(
+                f"Error {e.__class__.__name__} in writer_force_flush: {e}"
+            )
+            raise FileWriterFlushError(
+                f"Error forcing flush: {e.__class__.__name__} -> {e}"
+            ) from e
 
 
     # Thread Pool Management
@@ -1782,7 +1393,7 @@ class FileHandler:
                 self.logger.error(
                     f"Error shutting down thread pool executor: {e.__class__.__name__} -> {e}"
                 )
-                raise FileHandlerShutdownError(
+                raise FileWriterShutdownError(
                     f"Error shutting down thread pool executor: {e.__class__.__name__} -> {e}"
                 ) from e
 
@@ -1812,226 +1423,6 @@ class FileHandler:
             self.logger.error(
                 f"Error resuming thread pool executor: {e.__class__.__name__} -> {e}"
             )
-            raise FileHandlerResumeError(
+            raise FileWriterResumeError(
                 f"Error resuming thread pool executor: {e.__class__.__name__} -> {e}"
             ) from e
-
-    # Writer Performance
-
-    def writer_force_flush(self) -> None:
-        """
-        Force flush the file writer.
-        This method will ensure that all pending writes are flushed to the file(s).
-        """
-        try:
-            if not self._temp_sync_pool:
-                return None
-
-            with self._lock:  # Ensure thread-safe access to the sync pool
-                # Flush all files in the temporary sync pool
-                for path, file in self._temp_sync_pool.items():
-                    try:
-                        if not file.closed:
-                            file.flush()
-                    except Exception as e:
-                        raise RuntimeError(
-                            f"Error flushing file {path}: {e.__class__.__name__} -> {e}"
-                        ) from e
-
-        except Exception as e:
-            self.logger.error(
-                f"Error {e.__class__.__name__} in writer_force_flush: {e}"
-            )
-            raise FileHandlerFlushError(
-                f"Error forcing flush: {e.__class__.__name__} -> {e}"
-            ) from e
-
-    # --------------
-    # Config
-
-    def reset(self, file_paths: List[Union[Path, str]]) -> None:
-        """
-        Reset the FileHandler to its default configuration.
-        This method will reset all configuration parameters to their default values.
-
-        Arguments:
-            file_paths (List[Union[Path, str]]):
-                A list of file paths for logging. If a string is provided, it will be converted to a Path object.
-        """
-        try:
-            out_list: List[Path] = [
-                Path(path) if isinstance(path, str) else path for path in file_paths
-            ]
-
-            self.file_paths = out_list
-            self.write_mode = LogWriteMode.APPEND
-            self.retry_limit = 3
-            self.retry_delay = 0.5
-            self.backoff_factor = 0.2
-            self.max_file_size = 10 * 1024 * 1024
-            self.max_rotation = 2
-            self.max_buffer_size = 1024 * 1024  # Default no buffer size limit
-            self.use_write_flush = True  # Default no write flush
-
-        except Exception as e:
-            self.logger.error(
-                f"Error resetting FileHandler: {e.__class__.__name__} -> {e}"
-            )
-            raise FileHandlerResetError(
-                f"Error resetting FileHandler: {e.__class__.__name__} -> {e}"
-            ) from e
-
-    def config(
-        self,
-        file_paths: List[Union[Path, str]],
-        write_mode: LogWriteMode = LogWriteMode.APPEND,
-        retry_limit: int = 3,
-        retry_delay: float = 0.5,
-        backoff_factor: float = 0.2,
-        max_file_size: int = 10 * 1024 * 1024,  # Default 10 MB
-        max_rotation: int = 5,  # Default max number of rotated files
-        max_buffer_size: int = 1024 * 1024,  # Default no buffer size limit
-        use_write_flush: bool = True,  # Default no write flush
-        logger: logging.Logger | None = None,
-    ) -> None:
-        """
-        Configure the FileHandler with new settings.
-
-        Arguments:
-            file_paths (List[Union[Path, str]]):
-                A list of file paths for logging.
-            write_mode (LogWriteMode):
-                Write mode for file logging (default is LogWriteMode.APPEND).
-            retry_limit (int):
-                Number of retries for file operations (default is 3).
-            retry_delay (float):
-                Delay in seconds between retries (default is 0.5).
-            backoff_factor (float):
-                Backoff factor for retry delays (default is 0.2).
-            max_file_size (int):
-                Maximum file size in bytes (default is 10 MB).
-            max_rotation (int):
-                Maximum number of rotated log files (default is 5).
-            max_buffer_size (int):
-                Maximum buffer size in bytes (default is 0, meaning no limit).
-            use_write_flush (bool):
-                Whether to flush the file after each write (default is True).
-            logger (logging.Logger | None):
-                An optional logger instance to use for logging.
-        """
-
-        try:
-
-            if file_paths is not None:
-                out_paths: List[Path] = [
-                    Path(path) if isinstance(path, str) else path for path in file_paths
-                ]
-                self.file_paths = out_paths
-
-            if write_mode is not None:
-                self.write_mode = write_mode
-
-            if retry_limit is not None:
-                self.retry_limit = retry_limit
-
-            if retry_delay is not None:
-                self.retry_delay = retry_delay
-
-            if backoff_factor is not None:
-                self.backoff_factor = backoff_factor
-
-            if max_file_size is not None:
-                self.max_file_size = max_file_size
-
-            if max_rotation is not None:
-                self.max_rotation = max_rotation
-
-            if max_buffer_size is not None:
-                self.max_buffer_size = max_buffer_size
-
-            if use_write_flush is not None:
-                self.use_write_flush = use_write_flush
-
-            if logger is not None:
-                self.logger = logger
-
-        except Exception as e:
-            self.logger.error(
-                f"Error configuring FileHandler: {e.__class__.__name__} -> {e}"
-            )
-            raise FileHandlerConfigError(
-                f"Error configuring FileHandler: {e.__class__.__name__} -> {e}"
-            ) from e
-
-    def config_dict(self, config_dict: Dict[str, Any]) -> None:
-        """
-        Configure the FileHandler using a dictionary.
-
-        Arguments:
-            configDict (Dict[str, Any]): A dictionary containing configuration options.
-
-        Options:
-        ---------
-            file_paths (List[Union[Path, str]]): List of file paths for logging.
-            write_mode (LogWriteMode): Write mode for file logging (default is LogWriteMode.APPEND).
-            retry_limit (int): Number of retries for file operations (default is 3).
-            retry_delay (float): Delay in seconds between retries (default is 0.5).
-            backoff_factor (float): Backoff factor for retry delays (default is 0.2).
-            max_file_size (int): Maximum file size in bytes (default is 10 MB).
-            max_rotation (int): Maximum number of rotated log files (default is 5).
-            max_buffer_size (int): Maximum buffer size in bytes (default is 0, meaning no limit).
-            use_write_flush (bool): Whether to flush the file after each write (default is True).
-            logger (logging.Logger | None): An optional logger instance to use for logging.
-        """
-        if not isinstance(config_dict, dict):
-            raise ValueError("Configuration must be a dictionary")
-
-        self.config(**config_dict)
-
-    def config_json(self, config_json: str | bytes) -> None:
-        """
-        Configure the FileHandler using a JSON string or dictionary.
-
-        Arguments:
-            config_json (Union[str, Dict[str, Any]]): A JSON string or dictionary containing configuration options.
-        """
-        if isinstance(config_json, str):
-            try:
-                config_dict: Dict[str, Any] = json.loads(config_json)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON format: {e}") from e
-
-        elif isinstance(config_json, bytes):
-            try:
-                config_dict: Dict[str, Any] = json.loads(config_json.decode("utf-8"))
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON format: {e}") from e
-        else:
-            raise ValueError("Configuration must be a JSON string or bytes")
-
-        self.config_dict(config_dict)
-
-    def config_yaml(self, config_yaml: str | bytes) -> None:
-        """
-        Configure the FileHandler using a YAML string or dictionary.
-
-        Arguments:
-            config_yaml (Union[str, Dict[str, Any]]): A YAML string or dictionary containing configuration options.
-        """
-        if isinstance(config_yaml, str):
-            try:
-                config_dict: Dict[str, Any] = yaml.safe_load(config_yaml)
-            except yaml.YAMLError as e:
-                raise ValueError(f"Invalid YAML format: {e}") from e
-
-        elif isinstance(config_yaml, bytes):
-            try:
-                config_dict: Dict[str, Any] = yaml.safe_load(
-                    config_yaml.decode("utf-8")
-                )
-            except yaml.YAMLError as e:
-                raise ValueError(f"Invalid YAML format: {e}") from e
-        else:
-            raise ValueError("Configuration must be a YAML string or bytes")
-
-        self.config_dict(config_dict)

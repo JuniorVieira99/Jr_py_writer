@@ -1,7 +1,7 @@
 [project]
-name = "jr-py-writer"
+name = "jr-file-handler"
 version = "0.1.0"
-description = "A file writer for asynchronous logging class for Python."
+description = "A file handler for asynchronous and synchronous actions for Python."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -24,10 +24,16 @@ keywords = [
     "logging",
     "file",
     "writing",
+    "reading",
+    "asynchronous programming",
+    "synchronous programming",
+    "async",
     "python",
     "asynchronous",
     "asyncio",
     "file writer",
+    "file handler",
+    "file reader",
 ]
 
 dependencies = [
@@ -46,7 +52,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["jr_py_writer*"]
+include = ["jr_file_handler*"]
 exclude = ["tests*"]
 
 [tool.pytest.ini_options]
