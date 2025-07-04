@@ -4,16 +4,14 @@
 
 # Standard library imports
 from pathlib import Path
-from typing import Generator, List, Final
-import time
+from typing import Dict, Generator, List, Final, Any
 import threading
 import json
 import yaml
-import os
+import asyncio
 
 # Third-party imports
 import pytest
-import psutil
 
 # Local imports
 from jr_file_handler.classes.file_writer import FileWriter
@@ -88,6 +86,8 @@ EDGE_LOG = [55, 1.0, -1.0, [], {}, (), set(), None]
 
 BATCH_TEST_CASES: Final[List[int]] = [100, 300, 500, 1000, 2000]
 
+ST_MESSAGE: Final[str] = "This is a test message for the file reader and writer."
+
 # ----------------------------------------------------------------------------------------------
 # EDGE Tests
 # ----------------------------------------------------------------------------------------------
@@ -151,10 +151,6 @@ class TestFileWriterEdge:
 
     def test_file_writer_edge_setters(self, file_writer: FileWriter):
         """Test edge cases for FileWriter."""
-
-        # Test with empty file_paths
-        with pytest.raises(FileWriterSettingsError):
-            file_writer.file_paths = []
 
         # Test with invalid retry_limit
         with pytest.raises(FileWriterSettingsError):
@@ -352,7 +348,7 @@ class TestFileWriterFunctionality:
     - Memory cleanup after usage
     """
 
-    def test_file_rotation(self, file_writer, tmp_path):
+    def test_file_rotation(self, file_writer: FileWriter, tmp_path):
         """Test file rotation when max size is exceeded."""
 
         # Set Logger
@@ -386,7 +382,7 @@ class TestFileWriterFunctionality:
                 if rotation_file.exists():
                     rotation_file.unlink()
 
-    def test_thread_safety(self, file_writer, tmp_path):
+    def test_thread_safety(self, file_writer: FileWriter, tmp_path):
         """Test thread safety with concurrent writes."""
         temp_file = tmp_path / "thread_test.log"
         file_writer.file_paths = [temp_file]
@@ -409,10 +405,75 @@ class TestFileWriterFunctionality:
         # Force the file handler to flush the buffer
         file_writer.buffer_force_flush()
 
+        # Clear the file writer
+        file_writer.clear_all()
+
         # Verify all messages were written
         with open(temp_file, "r") as f:
             content = f.read()
             assert content.count("Thread message") == 500
+            assert "Thread message" in content, "First thread message should be present"
+
+    def test_thread_with_async_safety(self, file_writer: FileWriter, tmp_path):
+        """Test thread safety with concurrent writes."""
+        temp_file = tmp_path / "thread_test.log"
+        file_writer.file_paths = [temp_file]
+
+        async def write_logs():
+            for i in range(100):
+                await file_writer.async_write(f"Thread message {i}")
+
+        # Create multiple threads
+        threads = [threading.Thread(target=asyncio.run, args=(write_logs(),)) for _ in range(5)]
+
+        # Start all threads
+        for thread in threads:
+            thread.start()
+
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+
+        # Force the file handler to flush the buffer
+        file_writer.buffer_force_flush()
+
+        # Clear the file writer
+        file_writer.clear_all()
+
+        # Verify all messages were written
+        with open(temp_file, "r") as f:
+            content = f.read()
+            assert content.count("Thread message") == 500
+            assert "Thread message" in content, "First thread message should be present"
+
+    @pytest.mark.asyncio
+    async def test_async_thread_safety(self, file_writer: FileWriter, tmp_path):
+        """Test async thread safety with concurrent writes."""
+        temp_file = tmp_path / "async_thread_test.log"
+        temp_file.touch()  # Ensure the file is created
+        file_writer.file_paths = [temp_file]
+        
+        file_writer.max_buffer_size = 0  # Disable buffering for testing
+
+        async def write_logs():
+            for i in range(100):
+                await file_writer.async_write(f"Async thread message {i}")
+
+        # Create multiple threads
+        threads = [write_logs() for _ in range(5)]
+        
+        # Use asyncio to run all threads concurrently
+        await asyncio.gather(*threads)
+
+        # Clear the file writer
+        file_writer.clear_all()
+
+        # Verify all messages were written
+        with open(temp_file, "r") as f:
+            content = f.read()
+            assert content.count("Async thread message") == 500
+            assert "Async thread message" in content, "First async thread message should be present"
+
 
     def test_memory_cleanup(self, tmp_path):
         """Test that file handles are properly cleaned up."""
@@ -514,6 +575,208 @@ class TestFileWriterMagicMethods:
         # Test __del__
         del file_writer  # This should not raise any exceptions
         del handler  # This should not raise any exceptions either
+
+
+# ----------------------------------------------------------------------------------------------
+# ClassMethods Tests
+# ----------------------------------------------------------------------------------------------
+
+
+class TestFileWriterClassMethods:
+    """
+    Test class methods of FileWriter.
+
+    Tests:
+    -------
+    - **test_from_dict:**
+        - Test creating FileWriter from a dictionary.
+    - **test_from_json:**
+        - Test creating FileWriter from a JSON string.
+    - **test_from_yaml:**
+        - Test creating FileWriter from a YAML string.
+    """
+
+    def test_from_dict(self, tmp_path):
+        tmp_list: List[Path] = temporary_file_writer(2, tmp_path)
+
+        config_dict: Dict[str, Any] = {
+            "file_paths": [str(path) for path in tmp_list],
+            "write_mode": "a",
+            "max_file_size": 10 * 1024 * 1024,  # 10 MB
+            "max_rotation": 5,
+            "max_buffer_size": 0,
+            "retry_limit": 10,
+            "retry_delay": 0.5,
+            "backoff_factor": 0.1,
+        }
+
+        my_file_reader: FileWriter = FileWriter.from_dict(config_dict)
+
+        assert len(my_file_reader) == 2
+        assert my_file_reader.file_paths == tmp_list
+        assert my_file_reader.retry_limit == 10
+        assert my_file_reader.retry_delay == pytest.approx(0.5)
+        assert my_file_reader.backoff_factor == pytest.approx(0.1)
+        assert my_file_reader.write_mode == "a"
+        assert my_file_reader.max_file_size == 10 * 1024 * 1024
+        assert my_file_reader.max_rotation == 5
+        assert my_file_reader.max_buffer_size == 0
+
+    def test_from_json(self, tmp_path):
+        tmp_list: List[Path] = temporary_file_writer(2, tmp_path)
+
+        config_dict: Dict[str, Any] = {
+            "file_paths": [str(path) for path in tmp_list],
+            "write_mode": "a",
+            "max_file_size": 10 * 1024 * 1024,  # 10 MB
+            "max_rotation": 5,
+            "max_buffer_size": 0,
+            "retry_limit": 10,
+            "retry_delay": 0.5,
+            "backoff_factor": 0.1,
+            
+        }
+
+        json_str: str = json.dumps(config_dict)
+
+        my_file_reader: FileWriter = FileWriter.from_json(json_str)
+
+        assert len(my_file_reader) == 2
+        assert my_file_reader.file_paths == tmp_list
+        assert my_file_reader.retry_limit == 10
+        assert my_file_reader.retry_delay == pytest.approx(0.5)
+        assert my_file_reader.backoff_factor == pytest.approx(0.1)
+        assert my_file_reader.write_mode == "a"
+        assert my_file_reader.max_file_size == 10 * 1024 * 1024
+        assert my_file_reader.max_rotation == 5
+        assert my_file_reader.max_buffer_size == 0
+        
+    def test_from_yaml(self, tmp_path):
+        tmp_list: List[Path] = temporary_file_writer(2, tmp_path)
+
+        config_dict: Dict[str, Any] = {
+            "file_paths": [str(path) for path in tmp_list],
+            "write_mode": "a",
+            "max_file_size": 10 * 1024 * 1024,  # 10 MB
+            "max_rotation": 5,
+            "max_buffer_size": 0,
+            "retry_limit": 10,
+            "retry_delay": 0.5,
+            "backoff_factor": 0.1,
+            
+        }
+
+        yaml_str: str = yaml.dump(config_dict)
+
+        my_file_reader: FileWriter = FileWriter.from_yaml(yaml_str)
+
+        assert len(my_file_reader) == 2
+        assert my_file_reader.file_paths == tmp_list
+        assert my_file_reader.retry_limit == 10
+        assert my_file_reader.retry_delay == pytest.approx(0.5)
+        assert my_file_reader.backoff_factor == pytest.approx(0.1)
+
+
+# ----------------------------------------------------------------------------------------------
+# Config Tests
+# ----------------------------------------------------------------------------------------------
+
+
+class TestFileWriterConfig:
+    """
+    Test configuration methods of FileWriter.
+
+    Tests:
+    -------
+    - **test_config_from_dict:**
+        - Test configuration of FileWriter using a dictionary.
+    - **test_config_from_json:**
+        - Test configuration of FileWriter using a JSON file.
+    - **test_config_from_yaml:**
+        - Test configuration of FileWriter using a YAML file.
+    """
+
+    def test_config_from_dict(self, file_writer: FileWriter, tmp_path):
+        """Test configuration of FileReader using a dictionary."""
+        tmp_list = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
+        config_dict: Dict[str, Any] = {
+            "file_paths": [str(path) for path in tmp_list],
+            "write_mode": "a",
+            "max_file_size": 10 * 1024 * 1024,  # 10 MB
+            "max_rotation": 5,
+            "max_buffer_size": 0,
+            "retry_limit": 3,
+            "retry_delay": 0.5,
+            "backoff_factor": 0.1,
+            
+        }
+
+        file_writer.config_from_dict(config_dict)
+
+        assert file_writer.file_paths == tmp_list
+        assert file_writer.retry_limit == 3
+        assert file_writer.retry_delay == pytest.approx(0.5)
+        assert file_writer.backoff_factor == pytest.approx(0.1)
+        assert file_writer.write_mode == "a"
+        assert file_writer.max_file_size == 10 * 1024 * 1024
+        assert file_writer.max_rotation == 5
+        assert file_writer.max_buffer_size == 0
+
+    def test_config_from_json(self, file_writer: FileWriter, tmp_path):
+        """Test configuration of FileReader using a JSON file."""
+        tmp_list = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
+        
+        config_dict: Dict[str, Any] = {
+            "file_paths": [str(path) for path in tmp_list],
+            "write_mode": "a",
+            "max_file_size": 10 * 1024 * 1024,  # 10 MB
+            "max_rotation": 5,
+            "max_buffer_size": 0,
+            "retry_limit": 3,
+            "retry_delay": 0.5,
+            "backoff_factor": 0.1,
+        }
+
+
+        json_str: str = json.dumps(config_dict)
+
+        file_writer.config_from_json(json_str)
+
+        assert file_writer.file_paths == tmp_list
+        assert file_writer.retry_limit == 3
+        assert file_writer.retry_delay == pytest.approx(0.5)
+        assert file_writer.backoff_factor == pytest.approx(0.1)
+        assert file_writer.write_mode == "a"
+        assert file_writer.max_file_size == 10 * 1024 * 1024
+        assert file_writer.max_rotation == 5
+        assert file_writer.max_buffer_size == 0
+
+    def test_config_from_yaml(self, file_writer: FileWriter, tmp_path):
+        """Test configuration of FileReader using a YAML file."""
+        tmp_list = [tmp_path / "test_1.log", tmp_path / "test_2.log"]
+        config_dict: Dict[str, Any] = {
+            "file_paths": [str(path) for path in tmp_list],
+            "write_mode": "a",
+            "max_file_size": 10 * 1024 * 1024,  # 10 MB
+            "max_rotation": 5,
+            "max_buffer_size": 0,
+            "retry_limit": 3,
+            "retry_delay": 0.5,
+            "backoff_factor": 0.1,
+        }
+
+        yaml_file: str = yaml.dump(config_dict)
+
+        file_writer.config_from_yaml(yaml_file)
+
+        assert file_writer.file_paths == tmp_list
+        assert file_writer.retry_limit == 3
+        assert file_writer.retry_delay == pytest.approx(0.5)
+        assert file_writer.backoff_factor == pytest.approx(0.1)
+        assert file_writer.write_mode == "a"
+        assert file_writer.max_file_size == 10 * 1024 * 1024
+        assert file_writer.max_rotation == 5
+        assert file_writer.max_buffer_size == 0
 
 
 # ----------------------------------------------------------------------------------------------

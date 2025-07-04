@@ -41,6 +41,39 @@ from jr_file_handler.exceptions.exceptions_file_writer import (
     FileWriterResetError,
 )
 
+# ----------------------------------------------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------------------------------------------
+
+def _validate_paths(paths: Union[List[Union[Path, str]], None]) -> List[Path]:
+    """
+    Validate and convert a list of file paths to Path objects.
+
+    Arguments:
+        paths (Union[List[Union[Path, str]], None]): A list of file paths as Path objects or strings.
+
+    Returns:
+        List[Path]: A list of validated Path objects.
+    """
+    if paths is None:
+        return []
+
+    if not isinstance(paths, list):
+        raise TypeError(f"Expected file_paths to be a list, got {type(paths).__name__}")
+    
+    if len(paths) == 0:
+        return []
+
+    out_list = []
+    for path in paths:
+        if isinstance(path, str):
+            path = Path(path)
+        elif not isinstance(path, Path):
+            raise ValueError(f"Invalid file path: {path}. Must be a Path object.")
+        out_list.append(path)
+
+    return out_list
+    
 
 # ----------------------------------------------------------------------------------------------
 # Classes
@@ -212,8 +245,9 @@ class FileWriter:
                     f"File paths must be a list of Path objects, got {type(paths).__name__}"
                 )
 
-            if not paths:
+            if len(paths) == 0:
                 self._file_paths = []
+                return
 
             for path in paths:
                 if not isinstance(path, Path):
@@ -240,7 +274,7 @@ class FileWriter:
             ) from e
 
     @write_mode.setter
-    def write_mode(self, mode: LogWriteMode) -> None:
+    def write_mode(self, mode: LogWriteMode | str) -> None:
         """
         Sets the write mode for file logging.
 
@@ -252,13 +286,14 @@ class FileWriter:
                 raise ValueError(
                     f"Expected LogWriteMode or str, got {type(mode).__name__}"
                 )
-
-            if mode not in LogWriteMode:
+            
+            if isinstance(mode, str):
+                mode = LogWriteMode(mode)
+                
+            elif mode not in LogWriteMode:
                 raise ValueError(f"Write mode {mode} is not a valid LogWriteMode.")
 
-            self._write_mode = (
-                mode if isinstance(mode, LogWriteMode) else LogWriteMode(mode)
-            )
+            self._write_mode = mode
         except Exception as e:
             self.logger.error(f"Invalid write mode: {e.__class__.__name__} -> {e}")
             raise FileWriterSettingsError(
@@ -493,22 +528,7 @@ class FileWriter:
 
         try:
             # Ensure file_paths is a list of Path objects
-            out_list = []
-            if file_paths is None:
-                out_list = []
-            else:
-                if not isinstance(file_paths, list):
-                    raise TypeError(
-                        f"File paths must be a list of Path or str objects, got {type(file_paths).__name__}"
-                    )
-                for path in file_paths:
-                    if isinstance(path, str):
-                        path = Path(path)
-                    elif not isinstance(path, Path):
-                        raise ValueError(
-                            f"Invalid file path: {path}. Must be a Path or str."
-                        )
-                    out_list.append(path)
+            out_list: List[Path] = _validate_paths(file_paths)
 
             if logger is not None:
                 self.logger = logger
@@ -738,21 +758,22 @@ class FileWriter:
                 if path in self._temp_sync_pool:
                     # If the file is already in the pool, skip it
                     continue
-
-                # Ensure the parent directory exists
-                self._ensure_parent_dirs(path)
-
-                # Create the file if it does not exist
-                self._create_file(path)
-
-                # Open the file in the specified write mode
-                file: TextIOWrapper = open(
-                    path, self.write_mode.value, encoding="utf-8"
-                )
-                if not file.writable():
-                    raise IOError(f"File {path} is not writable")
-
+                
                 with self._lock:  # Ensure thread-safe access to the sync pool
+
+                    # Ensure the parent directory exists
+                    self._ensure_parent_dirs(path)
+
+                    # Create the file if it does not exist
+                    self._create_file(path)
+
+                    # Open the file in the specified write mode
+                    file: TextIOWrapper = open(
+                        path, self.write_mode.value, encoding="utf-8"
+                    )
+                    if not file.writable():
+                        raise IOError(f"File {path} is not writable")
+
                     self._temp_sync_pool[path] = file
 
         except Exception as e:
@@ -776,19 +797,24 @@ class FileWriter:
             # Check if the sync pool is empty
             if not self._temp_sync_pool:
                 return
+            
+            # Get path keys
+            paths = list(self._temp_sync_pool.keys())
 
-            for path in self._temp_sync_pool.keys():
-                file = self._temp_sync_pool[path]
-                try:
-                    if isinstance(file, TextIOWrapper) and not file.closed:
-                        file.flush()
-                        file.close()
-                except Exception as e:
-                    # Log the error but continue closing other files
-                    self.logger.warning(f"Warning: Failed to close file {path}: {e}")
-                finally:
-                    # Always remove from pool even if close failed
-                    self._temp_sync_pool.pop(path, None)
+            # Iterate over the paths and close files
+            with self._lock:
+                for path in paths:
+                    file = self._temp_sync_pool[path]
+                    try:
+                        if isinstance(file, TextIOWrapper) and not file.closed:
+                            file.flush()
+                            file.close()
+                    except Exception as e:
+                        # Log the error but continue closing other files
+                        self.logger.warning(f"Warning: Failed to close file {path}: {e}")
+                    finally:
+                        # Always remove from pool even if close failed
+                        self._temp_sync_pool.pop(path, None)
 
             # Final clear as safety measure
             with self._lock:
@@ -1223,13 +1249,14 @@ class FileWriter:
         self.clear_sync_pool()
 
         # Clean file paths on exit
-        if hasattr(self, "_file_paths"):
-            self._file_paths = []
+        with self._lock:
+            if hasattr(self, "_file_paths"):
+                self._file_paths = []
 
-        # Clean the threadpool
-        if hasattr(self, "_threadpool") and self._threadpool:
-            if not self._threadpool._shutdown:
-                self._threadpool.shutdown(wait=True)
+            # Clean the threadpool
+            if hasattr(self, "_threadpool") and self._threadpool:
+                if not self._threadpool._shutdown:
+                    self._threadpool.shutdown(wait=True)
 
     # Logging
 
@@ -1481,7 +1508,33 @@ class FileWriter:
         Create a FileWriter instance from a configuration dictionary.
 
         Arguments:
-            config_dict (Dict[str, Any]): The configuration dictionary containing file paths and other settings.
+            config_dict (Dict[str, Any]): The configuration dictionary containing file paths and other settings. 
+        Defaults:
+        ----------
+        **file_paths (List[Path]):**
+            - List of file paths to write to.
+            - Default is `None`, which means no file paths are set.
+        **write_mode (LogWriteMode):**
+            - The mode in which to write to the files.
+            - Default is `LogWriteMode.APPEND`.
+        **max_file_size (int):**
+            - Maximum size of each log file in bytes.
+            - Default is `10 * 1024 * 1024` (10 MB).
+        **max_rotation (int):**
+            - Maximum number of rotated files to keep.
+            - Default is `5`.
+        **max_buffer_size (int):**
+            - Maximum size of the buffer in bytes.
+            - Default is `0`, which means no buffer is used.
+        **retry_limit (int):**
+            - Number of retries for writing to files.
+            - Default is `3`.
+        **retry_delay (float):**
+            - Delay between retries in seconds.
+            - Default is `1.0`.
+        **backoff_factor (float):**
+            - Factor by which the delay increases on each retry.
+            - Default is `0.2`.
 
         Returns:
             out (FileWriter): An instance of FileWriter configured with the provided settings.
@@ -1644,7 +1697,7 @@ class FileWriter:
 
     def config(
         self,
-        file_paths: Union[List[Path], None] = None,
+        file_paths: Union[List[Union[Path, str]], None] = None,
         write_mode: LogWriteMode = LogWriteMode.APPEND,
         max_file_size: int = 10 * 1024 * 1024,  # Default 10 MB
         max_rotation: int = 5,  # Default 5 rotations
@@ -1684,8 +1737,10 @@ class FileWriter:
             # Wait for pool to shutdown if it exists
             if self.is_pool_active():
                 self.force_shutdown(wait=True)
+                
+            out_list = _validate_paths(file_paths)
 
-            self.file_paths = file_paths if file_paths is not None else []
+            self.file_paths = out_list
             self.write_mode = write_mode
             self.max_file_size = max_file_size
             self.max_rotation = max_rotation
@@ -1734,7 +1789,7 @@ class FileWriter:
 
         Defaults:
         ----------
-        **file_paths (List[Path]):**
+        **file_paths ([List[[Path | str]] | None]):**
             - List of file paths to write to.
             - Default is `None`, which means no file paths are set.
         **write_mode (LogWriteMode):**
@@ -1777,7 +1832,7 @@ class FileWriter:
                     )
 
             # Extract configuration parameters from the dictionary
-            file_paths: Union[List[Path], None] = config.get("file_paths", None)
+            file_paths: Union[List[Union[Path, str]], None] = config.get("file_paths", None)
             write_mode: LogWriteMode = config.get("write_mode", LogWriteMode.APPEND)
             max_file_size: int = config.get(
                 "max_file_size", 10 * 1024 * 1024

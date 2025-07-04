@@ -11,7 +11,7 @@ import asyncio
 import time
 import json
 
-from typing import Generator, Iterator, List, Sequence, Union, Dict, Final, Any
+from typing import Generator, Iterator, Sequence, List, Union, Dict, Final, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
@@ -36,10 +36,45 @@ from jr_file_handler.exceptions.exceptions_file_reader import (
     FileReaderConfigError,
 )
 
+# ----------------------------------------------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------------------------------------------
+
+
+def _validate_paths(paths: Union[List[Union[Path, str]], None]) -> List[Path]:
+    """
+    Validate and convert a list of file paths to Path objects.
+
+    Arguments:
+        paths (Union[List[Union[Path, str]], None]): A list of file paths as Path objects or strings.
+
+    Returns:
+        List[Path]: A list of validated Path objects.
+    """
+    if paths is None:
+        return []
+
+    if not isinstance(paths, list):
+        raise TypeError(f"Expected file_paths to be a list, got {type(paths).__name__}")
+    
+    if len(paths) == 0:
+        return []
+
+    out_list = []
+    for path in paths:
+        if isinstance(path, str):
+            path = Path(path)
+        elif not isinstance(path, Path):
+            raise ValueError(f"Invalid file path: {path}. Must be a Path object.")
+        out_list.append(path)
+
+    return out_list
+    
 
 # ----------------------------------------------------------------------------------------------
 # Classes
 # ----------------------------------------------------------------------------------------------
+
 
 LIST_OF_NECESSARY_KEYS: Final[List[str]] = [
     "file_paths",
@@ -67,6 +102,7 @@ class FileReader:
     # Synchronous reading
     with FileReader(file_paths=["file1.txt", "file2.txt"]) as fr:
         content = fr.read()
+    
 
     # Asynchronous reading
     async with FileReader(file_paths=["file1.txt", "file2.txt"]) as fr
@@ -79,18 +115,7 @@ class FileReader:
     # Always remember to clear resources and close files
     reader.clear_all()
     ```
-
-    Notes:
-    ------
-    - Uses the `ReaderResultPack` class to store results of file reading operations.
-    - Each file read operation will return a `ReaderResult` object containing:
-        - The file path.
-        - The content of the file as a string or a generator.
-        - An exception if an error occurred during reading.
-    - **Check docs for `ReaderResultPack` class for more details on how to access results.**
-    - Will automatically handle error of path not found, file not readable, etc.
-    - Supports both synchronous and asynchronous reading of files.
-
+    
     Attributes:
         file_paths (List[Path]):
             A list of file paths to be read.
@@ -117,48 +142,20 @@ class FileReader:
 
         # Read files synchronously
         with my_file_reader as fr:
-            result_pack: ReaderResultPack = fr.read()
+            result_pack: Dict[Path, str | Exception] = fr.read()
 
         # Read files asynchronously
         async def read_files_async():
             async with my_file_reader as fr:
-                result_pack: ReaderResultPack = await fr.async_read()
+                result_pack: Dict[Path, str | Exception] = await fr.async_read()
         # Run the async function
         asyncio.run(read_files_async())
 
-        # Access results manually
-        for result in result_pack.get_all_results:
-            if result.exception:
-                print(f"Error reading {result.file_path}: {result.exception}")
-            else:
-                print(f"Content of {result.file_path}: {result.content}")
-
-        # Access results with properties
-
-        # Get summary of results
-        summary = result_pack.get_summary
-        print(summary)
-        # Or
-        result_pack.print_summary()
-
-        # Get count of successful and failed results
-        successful_count = result_pack.get_successful_count
-        failed_count = result_pack.get_failed_count
-
-        # Get all results
-        all_results = result_pack.get_all_results
-
-        # Get successful results
-        successful_results = result_pack.get_successful_results
-
-        # Get failed results
-        failed_results = result_pack.get_failed_results
-
         # Shutdown thread pool
-        reader.force_shutdown()
+        my_file_reader.force_shutdown()
 
         # Clear all resources
-        reader.clear_all()
+        my_file_reader.clear_all()
         ```
     """
 
@@ -257,7 +254,9 @@ class FileReader:
                 self._file_paths = []
 
             if not isinstance(paths, list):
-                paths = [paths]  # Convert single path to list
+                raise TypeError(
+                    f"Expected file_paths to be a list, got {type(paths).__name__}"
+                )
 
             if not paths:
                 self._file_paths = []
@@ -304,8 +303,8 @@ class FileReader:
                     f"Expected LogWriteMode or str, got {type(mode).__name__}"
                 )
 
-            if mode not in LogWriteMode:
-                raise ValueError(f"Write mode {mode} is not a valid LogWriteMode.")
+            if mode not in (LogWriteMode.READ, LogWriteMode.READ_WRITE, LogWriteMode.WRITE_READ):
+                raise ValueError(f"Invalid write mode: {mode}. Must be a read-compatible mode.")
 
             self._write_mode = (
                 mode if isinstance(mode, LogWriteMode) else LogWriteMode(mode)
@@ -427,22 +426,7 @@ class FileReader:
         """
         try:
             # Validate file_paths
-            out_list = []
-            if file_paths is None or len(file_paths) == 0:
-                self._file_paths = out_list
-            else:
-                if not isinstance(file_paths, list):
-                    raise TypeError(
-                        f"Expected file_paths to be a list, got {type(file_paths).__name__}"
-                    )
-                for path in file_paths:
-                    if isinstance(path, str):
-                        path = Path(path)
-                    elif not isinstance(path, Path):
-                        raise ValueError(
-                            f"Invalid file path: {path}. Must be a Path or str."
-                        )
-                    out_list.append(path)
+            out_list: List[Path] = _validate_paths(file_paths)
 
             if logger is not None:
                 self.logger = logger
@@ -464,7 +448,7 @@ class FileReader:
                 max_workers: int = min(max_workers, os.cpu_count() or 4)
 
             self._threadpool: ThreadPoolExecutor = ThreadPoolExecutor(
-                max_workers=max_workers
+                max_workers=max_workers, thread_name_prefix="FileReaderThread"
             )
 
         except Exception as e:
@@ -642,22 +626,28 @@ class FileReader:
             # Check if the sync pool is empty
             if not self._temp_sync_pool:
                 return
-
-            for path in list(self._temp_sync_pool.keys()):
-                file = self._temp_sync_pool[path]
-                try:
-                    if isinstance(file, TextIOWrapper) and not file.closed:
-                        file.flush()
-                        file.close()
-                except Exception as e:
-                    # Log the error but continue closing other files
-                    self.logger.warning(f"Warning: Failed to close file {path}: {e}")
-                finally:
-                    # Always remove from pool even if close failed
-                    self._temp_sync_pool.pop(path, None)
-
-            # Final clear as safety measure
+            
+            # Ensure the process is thread-safe
             with self._lock:
+                
+                # Get path keys
+                paths = list(self._temp_sync_pool.keys())
+            
+                # Iterate over the paths and close files
+                for path in paths:
+                    file = self._temp_sync_pool[path]
+                    try:
+                        if isinstance(file, TextIOWrapper) and not file.closed:
+                            file.flush()
+                            file.close()
+                    except Exception as e:
+                        # Log the error but continue closing other files
+                        self.logger.warning(f"Warning: Failed to close file {path}: {e}")
+                    finally:
+                        # Always remove from pool even if close failed
+                        self._temp_sync_pool.pop(path, None)
+                        
+                # Final clear as safety measure
                 self._temp_sync_pool.clear()
         except Exception as e:
             self.logger.error(
@@ -683,9 +673,17 @@ class FileReader:
         Returns:
             out (str) : The content of the file.
         """
-        with self._lock:  # Ensure thread-safe access to the file
-            file_str: str = file.read()
-            return file_str
+        try:
+            with self._lock:  # Ensure thread-safe access to the file
+                # Reset file pointer to the beginning before reading
+                file.seek(0)
+                file_str: str = file.read()
+                return file_str
+        except Exception as e:
+            self.logger.error(f"Error reading file {path}: {e}")
+            raise FileReaderReadError(
+                f"Error reading file {path}: {e.__class__.__name__} -> {e}"
+            ) from e
 
     def _read_file_retries(self, file: TextIOWrapper, path: Path) -> str:
         """
@@ -778,20 +776,21 @@ class FileReader:
                 self.logger.error(f"File {path} does not exist.")
                 raise FileExistsError(f"File {path} does not exist.")
 
-            file: TextIOWrapper | None = self._temp_sync_pool.get(path, None)
+            # Ensure the process is thread-safe
+            with self._lock:
+                file: TextIOWrapper | None = self._temp_sync_pool.get(path, None)
 
             # If file not in pool, then lazy initialize it
             if not file:
-                self.logger.warning(f"File {path} is not in the temporary sync pool.")
-                self.logger.debug(f"Opening file {path} for reading...")
+                self.logger.debug(f"File {path} is not in the temporary sync pool, opening it...")
                 with self._lock:
-                    file = open(path, self.write_mode.value, encoding="utf-8")
+                    file = open(path, "r", encoding="utf-8")
                     self._temp_sync_pool[path] = file
 
             # Check if the file is closed or not readable
             # Unlike to happen, but just in case
             if file.closed:
-                self.logger.warning(f"File {path} is closed. Reopening it...")
+                self.logger.debug(f"File {path} is closed. Reopening it...")
                 with self._lock:
                     # Reopen the file if it is closed
                     file = open(path, "r", encoding="utf-8")
@@ -913,8 +912,10 @@ class FileReader:
         """
         try:
             with self._lock:  # Ensure thread-safe access to the file
-                for line in file:
-                    yield line.strip()
+                file.seek(0)  # Reset file pointer to the beginning before reading
+                # Read the file line by line
+                line = file.readline().strip()
+                yield line
         except Exception as e:
             self.logger.error(f"Error reading file {path}: {e}")
             raise FileReaderReadError(f"Error reading file {path}: {e}") from e
@@ -988,31 +989,31 @@ class FileReader:
                 yield "File not found."
                 return
 
-            # Get the file from the temporary sync pool
-            file: TextIOWrapper | None = self._temp_sync_pool.get(path)
+            with self._lock:  # Ensure thread-safe access to the file
+                
+                # Get the file from the temporary sync pool
+                file: TextIOWrapper | None = self._temp_sync_pool.get(path)
 
-            # If file not in pool, then lazy initialize it
-            if not file:
-                self.logger.warning(f"File {path} is not in the temporary sync pool.")
-                with self._lock:
+                # If file not in pool, then lazy initialize it
+                if not file:
+                    self.logger.warning(f"File {path} is not in the temporary sync pool.")
                     self.logger.info(f"Opening file {path} for reading...")
                     file = open(path, self.write_mode.value, encoding="utf-8")
 
                     # Send to sync pool
                     self._temp_sync_pool[path] = file
 
-            # Check if the file is closed or not readable
-            # Unlike to happen, but just in case
-            if file.closed:
-                self.logger.warning(f"File {path} is closed. Reopening it...")
-                with self._lock:
+                # Check if the file is closed or not readable
+                # Unlike to happen, but just in case
+                if file.closed:
+                    self.logger.warning(f"File {path} is closed. Reopening it...")
                     # Reopen the file if it is closed
                     file = open(path, "r", encoding="utf-8")
 
-            if not file.readable():
-                self.logger.error(f"File {path} is not readable.")
-                yield "File is not readable."
-                return
+                if not file.readable():
+                    self.logger.error(f"File {path} is not readable.")
+                    yield "File is not readable."
+                    return
 
             for line in self._read_generator_retries(file, path):
                 yield line
@@ -1383,8 +1384,7 @@ class FileReader:
 
             if self.write_mode not in (
                 LogWriteMode.READ,
-                LogWriteMode.READ_WRITE,
-                LogWriteMode.WRITE_READ,
+                LogWriteMode.READ_WRITE
             ):
                 raise ValueError(
                     f"FileReader is not configured for reading. Use LogWriteMode.READ or LogWriteMode.READ_WRITE."
@@ -1411,8 +1411,7 @@ class FileReader:
 
             if self.write_mode not in (
                 LogWriteMode.READ,
-                LogWriteMode.READ_WRITE,
-                LogWriteMode.WRITE_READ,
+                LogWriteMode.READ_WRITE
             ):
                 raise ValueError(
                     f"FileReader is not configured for reading. Use LogWriteMode.READ or LogWriteMode.READ_WRITE."
@@ -1443,8 +1442,7 @@ class FileReader:
 
             if self.write_mode not in (
                 LogWriteMode.READ,
-                LogWriteMode.READ_WRITE,
-                LogWriteMode.WRITE_READ,
+                LogWriteMode.READ_WRITE
             ):
                 raise ValueError(
                     f"FileReader is not configured for reading. Use LogWriteMode.READ or LogWriteMode.READ_WRITE."
@@ -1475,8 +1473,7 @@ class FileReader:
 
             if self.write_mode not in (
                 LogWriteMode.READ,
-                LogWriteMode.READ_WRITE,
-                LogWriteMode.WRITE_READ,
+                LogWriteMode.READ_WRITE
             ):
                 raise ValueError(
                     f"FileReader is not configured for reading. Use LogWriteMode.READ or LogWriteMode.READ_WRITE."
@@ -1559,8 +1556,9 @@ class FileReader:
         """
         if not self._threadpool._shutdown:
             try:
-                self._threadpool.shutdown(wait=wait)
-                self.logger.debug("Thread pool executor shutdown successfully.")
+                with self._lock:
+                    self._threadpool.shutdown(wait=wait)
+                    self.logger.debug("Thread pool executor shutdown successfully.")
             except Exception as e:
                 self.logger.error(
                     f"Error shutting down thread pool executor: {e.__class__.__name__} -> {e}"
@@ -1575,22 +1573,27 @@ class FileReader:
         This method will reinitialize the thread pool executor.
         """
         try:
-            if self._threadpool is not None and self._threadpool._shutdown:
-                self._threadpool.shutdown(wait=True)
+            with self._lock:
+                
+                if self._threadpool is not None and self._threadpool._shutdown:
+                    self._threadpool.shutdown(wait=True)
 
-            # Init Threadpool
-            max_workers: int = (
-                min(len(self.file_paths), 4) if len(self.file_paths) > 1 else 1
-            )
-            if os.name == "nt":
-                max_workers: int = min(max_workers, 4)  # Windows file handle limits
-            else:
-                max_workers: int = min(max_workers, os.cpu_count() or 4)
+                # Init Threadpool
+                max_workers: int = (
+                    min(len(self.file_paths), 4) if len(self.file_paths) > 1 else 1
+                )
+                if os.name == "nt":
+                    max_workers: int = min(max_workers, 4)  # Windows file handle limits
+                else:
+                    max_workers: int = min(max_workers, os.cpu_count() or 4)
 
-            # Reinitialize the thread pool executor
-            self._threadpool = ThreadPoolExecutor(
-                max_workers=max_workers,
-            )
+                # Reinitialize the thread pool executor
+                self._threadpool = ThreadPoolExecutor(
+                    max_workers=max_workers, thread_name_prefix="FileReaderThread"
+                )
+                self.logger.debug(
+                    f"Thread pool executor resumed with {max_workers} workers."
+                )
         except Exception as e:
             self.logger.error(
                 f"Error resuming thread pool executor: {e.__class__.__name__} -> {e}"
@@ -1606,7 +1609,8 @@ class FileReader:
         Returns:
             bool: True if the thread pool executor is shutdown, False otherwise.
         """
-        return self._threadpool._shutdown if hasattr(self, "_threadpool") else True
+        with self._lock:
+            return self._threadpool._shutdown if hasattr(self, "_threadpool") else True
 
     def is_pool_active(self) -> bool:
         """
@@ -1615,7 +1619,8 @@ class FileReader:
         Returns:
             bool: True if the thread pool executor is active, False otherwise.
         """
-        return not self._threadpool._shutdown if hasattr(self, "_threadpool") else False
+        with self._lock:
+            return not self._threadpool._shutdown if hasattr(self, "_threadpool") else False
 
     # Class Methods
 
@@ -1813,22 +1818,7 @@ class FileReader:
                 self.force_shutdown(wait=True)
 
             # Validate file_paths
-            out_list = []
-            if file_paths is None or len(file_paths) == 0:
-                self._file_paths = out_list
-            else:
-                if not isinstance(file_paths, list):
-                    raise TypeError(
-                        f"Expected file_paths to be a list, got {type(file_paths).__name__}"
-                    )
-                for path in file_paths:
-                    if isinstance(path, str):
-                        path = Path(path)
-                    elif not isinstance(path, Path):
-                        raise ValueError(
-                            f"Invalid file path: {path}. Must be a Path or str."
-                        )
-                    out_list.append(path)
+            out_list = _validate_paths(file_paths)
 
             self.file_paths = out_list
             self.write_mode = write_mode
